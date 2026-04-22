@@ -1,33 +1,33 @@
-import { createClient } from '@/lib/supabase-server'
+import { cache } from 'react'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 
-export type PlatformState = {
-  disabled: boolean
-  reason: string | null
+type AppConfigRow = {
+  key: string
+  value_json: {
+    disabled?: boolean
+    reason?: string
+  } | null
 }
 
-export async function getPlatformState(): Promise<PlatformState> {
-  const envDisabled = process.env.PLATFORM_LICENSE_STATUS === 'disabled'
-  if (envDisabled) {
-    return { disabled: true, reason: 'Lizenzstatus deaktiviert.' }
+export const getPlatformDisabledState = cache(async () => {
+  const { data: rows, error } = await supabaseAdmin
+    .from('app_config')
+    .select('key, value_json')
+    .eq('key', 'platform_disabled')
+    .returns<AppConfigRow[]>()
+
+  if (error) {
+    return {
+      disabled: false,
+      reason: null as string | null,
+    }
   }
 
-  const supabase = await createClient()
-  const { data } = await supabase
-    .from('platform_settings')
-    .select('value_json')
-    .eq('key', 'platform_mode')
-    .maybeSingle()
+  const row = rows?.[0] ?? null
+  const value = row?.value_json ?? null
 
-  const value = data?.value_json as { disabled?: boolean; reason?: string } | undefined
   return {
     disabled: Boolean(value?.disabled),
     reason: value?.reason ?? null,
   }
-}
-
-export async function assertPlatformActive() {
-  const state = await getPlatformState()
-  if (state.disabled) {
-    throw new Error(state.reason || 'Plattform ist derzeit deaktiviert.')
-  }
-}
+})

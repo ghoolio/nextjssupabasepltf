@@ -1,0 +1,299 @@
+import Link from 'next/link'
+import { redirect } from 'next/navigation'
+import SiteHeader from '@/components/site-header'
+import AppFrame from '@/components/app-frame'
+import { createClient } from '@/lib/supabase-server'
+import { supabaseAdmin } from '@/lib/supabase-admin'
+
+type ProfileRow = {
+  id: string
+  username: string | null
+  display_name: string | null
+  membership_enabled: boolean
+  stripe_account_id: string | null
+}
+
+type VideoPurchaseAggregateRow = {
+  creator_id: string
+  amount_cents: number
+  platform_fee_amount_cents: number | null
+  creator_net_amount_cents: number | null
+  payment_status: 'paid' | 'refunded' | 'failed'
+}
+
+type MembershipPaymentAggregateRow = {
+  creator_id: string
+  amount_cents: number
+  platform_fee_amount_cents: number
+  creator_net_amount_cents: number
+  payment_status: 'paid' | 'refunded' | 'failed'
+}
+
+type MembershipTierRow = {
+  creator_id: string
+  archived: boolean
+}
+
+type CreatorStats = {
+  creator_id: string
+  display_name: string
+  username: string
+  membership_enabled: boolean
+  stripe_connected: boolean
+  video_gross: number
+  video_fees: number
+  video_net: number
+  membership_gross: number
+  membership_fees: number
+  membership_net: number
+  video_paid_count: number
+  membership_paid_count: number
+  active_tier_count: number
+}
+
+function formatMoney(cents: number, currency: 'EUR' | 'USD' = 'EUR') {
+  return new Intl.NumberFormat('de-DE', {
+    style: 'currency',
+    currency,
+  }).format(cents / 100)
+}
+
+export default async function SettingsPlatformCreatorsPage() {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect('/login')
+  }
+
+  const { data: profiles, error: profilesError } = await supabaseAdmin
+    .from('profiles')
+    .select('id, username, display_name, membership_enabled, stripe_account_id')
+    .returns<ProfileRow[]>()
+
+  if (profilesError) {
+    throw new Error(profilesError.message)
+  }
+
+  const { data: videoRows, error: videoError } = await supabaseAdmin
+    .from('video_purchases')
+    .select(
+      `
+      amount_cents,
+      platform_fee_amount_cents,
+      creator_net_amount_cents,
+      payment_status,
+      videos!inner(user_id)
+    `
+    )
+
+  if (videoError) {
+    throw new Error(videoError.message)
+  }
+
+  const normalizedVideoRows: VideoPurchaseAggregateRow[] = (videoRows ?? []).map((row: any) => ({
+    creator_id: row.videos.user_id,
+    amount_cents: row.amount_cents,
+    platform_fee_amount_cents: row.platform_fee_amount_cents,
+    creator_net_amount_cents: row.creator_net_amount_cents,
+    payment_status: row.payment_status,
+  }))
+
+  const { data: membershipRows, error: membershipError } = await supabaseAdmin
+    .from('membership_payments')
+    .select(
+      'creator_id, amount_cents, platform_fee_amount_cents, creator_net_amount_cents, payment_status'
+    )
+    .returns<MembershipPaymentAggregateRow[]>()
+
+  if (membershipError) {
+    throw new Error(membershipError.message)
+  }
+
+  const { data: tierRows, error: tierError } = await supabaseAdmin
+    .from('membership_tiers')
+    .select('creator_id, archived')
+    .returns<MembershipTierRow[]>()
+
+  if (tierError) {
+    throw new Error(tierError.message)
+  }
+
+  const statsMap = new Map<string, CreatorStats>()
+
+  for (const profile of profiles ?? []) {
+    statsMap.set(profile.id, {
+      creator_id: profile.id,
+      display_name: profile.display_name || profile.username || 'Unbekannter Creator',
+      username: profile.username || 'creator',
+      membership_enabled: profile.membership_enabled,
+      stripe_connected: Boolean(profile.stripe_account_id),
+      video_gross: 0,
+      video_fees: 0,
+      video_net: 0,
+      membership_gross: 0,
+      membership_fees: 0,
+      membership_net: 0,
+      video_paid_count: 0,
+      membership_paid_count: 0,
+      active_tier_count: 0,
+    })
+  }
+
+  for (const row of normalizedVideoRows) {
+    const stats = statsMap.get(row.creator_id)
+    if (!stats || row.payment_status !== 'paid') continue
+
+    stats.video_gross += row.amount_cents
+    stats.video_fees += row.platform_fee_amount_cents ?? 0
+    stats.video_net += row.creator_net_amount_cents ?? 0
+    stats.video_paid_count += 1
+  }
+
+  for (const row of membershipRows ?? []) {
+    const stats = statsMap.get(row.creator_id)
+    if (!stats || row.payment_status !== 'paid') continue
+
+    stats.membership_gross += row.amount_cents
+    stats.membership_fees += row.platform_fee_amount_cents
+    stats.membership_net += row.creator_net_amount_cents
+    stats.membership_paid_count += 1
+  }
+
+  for (const row of tierRows ?? []) {
+    const stats = statsMap.get(row.creator_id)
+    if (!stats || row.archived) continue
+    stats.active_tier_count += 1
+  }
+
+  const creators = [...statsMap.values()]
+    .map((stats) => ({
+      ...stats,
+      total_gross: stats.video_gross + stats.membership_gross,
+      total_fees: stats.video_fees + stats.membership_fees,
+      total_net: stats.video_net + stats.membership_net,
+      total_paid_count: stats.video_paid_count + stats.membership_paid_count,
+    }))
+    .sort((a, b) => b.total_gross - a.total_gross)
+
+  return (
+    <>
+      <SiteHeader userEmail={user.email} />
+      <AppFrame>
+        <main className="px-4 py-6 pb-24 md:px-6 lg:pb-6">
+          <div className="mb-6 flex flex-col gap-4">
+            <div className="flex flex-wrap items-center gap-3 text-sm text-white/60">
+              <Link
+                href="/settings/platform"
+                className="rounded-full border border-white/10 px-4 py-2 transition hover:bg-white/10"
+              >
+                ← Zurück zu Plattform
+              </Link>
+            </div>
+
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight text-white">
+                Creator-Übersicht
+              </h1>
+              <p className="mt-1 text-sm text-white/50">
+                Umsatz, Gebühren und Aktivität pro Creator.
+              </p>
+            </div>
+          </div>
+
+          <section className="rounded-2xl border border-white/10 bg-white/5 p-4 md:p-5">
+            {creators.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="min-w-full border-separate border-spacing-y-2">
+                  <thead>
+                    <tr className="text-left text-xs uppercase tracking-wide text-white/40">
+                        <th className="px-3 py-2">Creator</th>
+                        <th className="px-3 py-2">Connect</th>
+                        <th className="px-3 py-2">Tiers</th>
+                        <th className="px-3 py-2">Brutto</th>
+                        <th className="px-3 py-2">Gebühren</th>
+                        <th className="px-3 py-2">Netto</th>
+                        <th className="px-3 py-2">Zahlungen</th>
+                        <th className="px-3 py-2">Details</th>
+                        <th className="px-3 py-2">Kanal</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {creators.map((creator) => (
+                      <tr
+                        key={creator.creator_id}
+                        className="rounded-2xl bg-black/20 text-sm text-white/80"
+                      >
+                        <td className="rounded-l-2xl px-3 py-3">
+                          <div className="font-medium text-white">{creator.display_name}</div>
+                          <div className="text-xs text-white/45">@{creator.username}</div>
+                        </td>
+
+                        <td className="px-3 py-3">
+                          <span
+                            className={`inline-flex rounded-full px-2 py-1 text-xs ${
+                              creator.stripe_connected
+                                ? 'border border-emerald-400/20 bg-emerald-400/10 text-emerald-200'
+                                : 'border border-amber-400/20 bg-amber-400/10 text-amber-200'
+                            }`}
+                          >
+                            {creator.stripe_connected ? 'Verbunden' : 'Fehlt'}
+                          </span>
+                        </td>
+
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          {creator.active_tier_count}
+                        </td>
+
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          {formatMoney(creator.total_gross)}
+                        </td>
+
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          {formatMoney(creator.total_fees)}
+                        </td>
+
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          {formatMoney(creator.total_net)}
+                        </td>
+
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          {creator.total_paid_count}
+                        </td>
+
+                        <td className="px-3 py-3">
+                            <Link
+                                href={`/settings/platform/creators/${creator.creator_id}`}
+                                className="rounded-full border border-white/10 px-3 py-1.5 text-xs text-white transition hover:bg-white/10"
+                            >
+                                Details
+                            </Link>
+                            </td>
+
+                            <td className="rounded-r-2xl px-3 py-3">
+                            <Link
+                                href={`/channel/${creator.creator_id}`}
+                                className="rounded-full border border-white/10 px-3 py-1.5 text-xs text-white transition hover:bg-white/10"
+                            >
+                                Kanal
+                            </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-white/10 bg-black/20 p-5 text-sm text-white/50">
+                Noch keine Creator-Daten vorhanden.
+              </div>
+            )}
+          </section>
+        </main>
+      </AppFrame>
+    </>
+  )
+}

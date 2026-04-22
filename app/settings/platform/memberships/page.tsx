@@ -5,11 +5,14 @@ import AppFrame from '@/components/app-frame'
 import { createClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
+type MembershipStatus = 'active' | 'canceled' | 'expired'
+type StatusFilter = MembershipStatus | 'all'
+
 type MembershipRow = {
   creator_id: string
   member_id: string
   tier_id: string
-  status: 'active' | 'canceled' | 'expired'
+  status: MembershipStatus
   provider: string | null
   provider_subscription_id: string | null
   current_period_end: string | null
@@ -49,7 +52,7 @@ function formatMoney(cents: number, currency: 'EUR' | 'USD' = 'EUR') {
   }).format(cents / 100)
 }
 
-function statusBadgeClass(status: MembershipRow['status']) {
+function statusBadgeClass(status: MembershipStatus) {
   if (status === 'active') {
     return 'border border-emerald-400/20 bg-emerald-400/10 text-emerald-200'
   }
@@ -59,8 +62,13 @@ function statusBadgeClass(status: MembershipRow['status']) {
   return 'border border-red-400/20 bg-red-400/10 text-red-200'
 }
 
-export default async function SettingsPlatformMembershipsPage() {
+export default async function SettingsPlatformMembershipsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string; q?: string }>
+}) {
   const supabase = await createClient()
+  const qs = await searchParams
 
   const {
     data: { user },
@@ -69,6 +77,12 @@ export default async function SettingsPlatformMembershipsPage() {
   if (!user) {
     redirect('/login')
   }
+
+  const statusFilter = (['active', 'canceled', 'expired', 'all'].includes(qs.status || '')
+    ? qs.status
+    : 'all') as StatusFilter
+
+  const query = (qs.q || '').trim().toLowerCase()
 
   const { data: membershipRows, error: membershipError } = await supabaseAdmin
     .from('creator_memberships')
@@ -128,12 +142,44 @@ export default async function SettingsPlatformMembershipsPage() {
   const memberMap = new Map((memberProfiles ?? []).map((p) => [p.id, p]))
   const tierMap = new Map((tierRows ?? []).map((t) => [t.id, t]))
 
+  const filteredMemberships = memberships.filter((membership) => {
+    if (statusFilter !== 'all' && membership.status !== statusFilter) {
+      return false
+    }
+
+    if (!query) return true
+
+    const creator = creatorMap.get(membership.creator_id)
+    const member = memberMap.get(membership.member_id)
+    const tier = tierMap.get(membership.tier_id)
+
+    const haystack = [
+      creator?.display_name || '',
+      creator?.username || '',
+      member?.display_name || '',
+      member?.username || '',
+      tier?.name || '',
+      membership.provider_subscription_id || '',
+    ]
+      .join(' ')
+      .toLowerCase()
+
+    return haystack.includes(query)
+  })
+
   const activeCount = memberships.filter((m) => m.status === 'active').length
   const canceledCount = memberships.filter((m) => m.status === 'canceled').length
   const expiredCount = memberships.filter((m) => m.status === 'expired').length
   const scheduledCancelCount = memberships.filter(
     (m) => m.status === 'active' && Boolean(m.cancel_at_period_end)
   ).length
+
+  const statusLinks: { key: StatusFilter; label: string }[] = [
+    { key: 'all', label: 'Alle' },
+    { key: 'active', label: 'Aktiv' },
+    { key: 'canceled', label: 'Gekündigt' },
+    { key: 'expired', label: 'Abgelaufen' },
+  ]
 
   return (
     <>
@@ -150,13 +196,55 @@ export default async function SettingsPlatformMembershipsPage() {
               </Link>
             </div>
 
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight text-white">
-                Memberships
-              </h1>
-              <p className="mt-1 text-sm text-white/50">
-                Plattformweite Übersicht über aktive, gekündigte und abgelaufene Mitgliedschaften.
-              </p>
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+              <div>
+                <h1 className="text-2xl font-semibold tracking-tight text-white">
+                  Memberships
+                </h1>
+                <p className="mt-1 text-sm text-white/50">
+                  Plattformweite Übersicht über aktive, gekündigte und abgelaufene Mitgliedschaften.
+                </p>
+              </div>
+
+              <form className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <input
+                  type="text"
+                  name="q"
+                  defaultValue={qs.q || ''}
+                  placeholder="Creator, Member oder Tier suchen"
+                  className="w-full rounded-full border border-white/10 bg-black/20 px-4 py-2 text-sm text-white outline-none placeholder:text-white/35 sm:w-80"
+                />
+                <input type="hidden" name="status" value={statusFilter} />
+                <button
+                  type="submit"
+                  className="rounded-full bg-white px-4 py-2 text-sm font-medium text-black transition hover:opacity-90"
+                >
+                  Suchen
+                </button>
+              </form>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {statusLinks.map((item) => {
+                const active = item.key === statusFilter
+                const href = `/settings/platform/memberships?status=${item.key}${
+                  qs.q ? `&q=${encodeURIComponent(qs.q)}` : ''
+                }`
+
+                return (
+                  <Link
+                    key={item.key}
+                    href={href}
+                    className={`rounded-full border px-4 py-2 text-sm transition ${
+                      active
+                        ? 'border-white bg-white text-black'
+                        : 'border-white/10 text-white hover:bg-white/10'
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                )
+              })}
             </div>
           </div>
 
@@ -185,7 +273,7 @@ export default async function SettingsPlatformMembershipsPage() {
           </section>
 
           <section className="rounded-2xl border border-white/10 bg-white/5 p-4 md:p-5">
-            {memberships.length > 0 ? (
+            {filteredMemberships.length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="min-w-full border-separate border-spacing-y-2">
                   <thead>
@@ -201,7 +289,7 @@ export default async function SettingsPlatformMembershipsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {memberships.map((membership, index) => {
+                    {filteredMemberships.map((membership, index) => {
                       const creator = creatorMap.get(membership.creator_id)
                       const member = memberMap.get(membership.member_id)
                       const tier = tierMap.get(membership.tier_id)
@@ -288,7 +376,7 @@ export default async function SettingsPlatformMembershipsPage() {
               </div>
             ) : (
               <div className="rounded-2xl border border-white/10 bg-black/20 p-5 text-sm text-white/50">
-                Noch keine Memberships vorhanden.
+                Keine Memberships für die aktuelle Suche oder den gewählten Status gefunden.
               </div>
             )}
           </section>

@@ -1,10 +1,7 @@
 import Link from 'next/link'
-import { redirect } from 'next/navigation'
-import SiteHeader from '@/components/site-header'
-import AppFrame from '@/components/app-frame'
-import { createClient } from '@/lib/supabase-server'
+import PlatformShell from '@/components/platform-shell'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { requirePlatformAdmin } from '@/lib/platform-admin'
+import { requirePlatformSupportAccess } from '@/lib/platform-admin'
 
 type MembershipStatus = 'active' | 'canceled' | 'expired'
 type StatusFilter = MembershipStatus | 'all'
@@ -68,7 +65,7 @@ export default async function SettingsPlatformMembershipsPage({
 }: {
   searchParams: Promise<{ status?: string; q?: string }>
 }) {
-  const { user } = await requirePlatformAdmin()
+  const { user } = await requirePlatformSupportAccess()
   const qs = await searchParams
 
   const statusFilter = (['active', 'canceled', 'expired', 'all'].includes(qs.status || '')
@@ -178,216 +175,197 @@ export default async function SettingsPlatformMembershipsPage({
     qs.q ? `&q=${encodeURIComponent(qs.q)}` : ''
   }`
 
-  return (
+  const actions = (
     <>
-      <SiteHeader userEmail={user.email} />
-      <AppFrame>
-        <main className="px-4 py-6 pb-24 md:px-6 lg:pb-6">
-          <div className="mb-6 flex flex-col gap-4">
-            <div className="flex flex-wrap items-center gap-3 text-sm text-white/60">
-              <Link
-                href="/settings/platform"
-                className="rounded-full border border-white/10 px-4 py-2 transition hover:bg-white/10"
-              >
-                ← Zurück zu Plattform
-              </Link>
-            </div>
+      <form className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <input
+          type="text"
+          name="q"
+          defaultValue={qs.q || ''}
+          placeholder="Creator, Member oder Tier suchen"
+          className="w-full rounded-full border border-white/10 bg-black/20 px-4 py-2 text-sm text-white outline-none placeholder:text-white/35 sm:w-80"
+        />
+        <input type="hidden" name="status" value={statusFilter} />
+        <button
+          type="submit"
+          className="rounded-full bg-white px-4 py-2 text-sm font-medium text-black transition hover:opacity-90"
+        >
+          Suchen
+        </button>
+      </form>
 
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-              <div>
-                <h1 className="text-2xl font-semibold tracking-tight text-white">
-                  Memberships
-                </h1>
-                <p className="mt-1 text-sm text-white/50">
-                  Plattformweite Übersicht über aktive, gekündigte und abgelaufene Mitgliedschaften.
-                </p>
-              </div>
-
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <form className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                  <input
-                    type="text"
-                    name="q"
-                    defaultValue={qs.q || ''}
-                    placeholder="Creator, Member oder Tier suchen"
-                    className="w-full rounded-full border border-white/10 bg-black/20 px-4 py-2 text-sm text-white outline-none placeholder:text-white/35 sm:w-80"
-                  />
-                  <input type="hidden" name="status" value={statusFilter} />
-                  <button
-                    type="submit"
-                    className="rounded-full bg-white px-4 py-2 text-sm font-medium text-black transition hover:opacity-90"
-                  >
-                    Suchen
-                  </button>
-                </form>
-
-                <a
-                  href={exportHref}
-                  className="rounded-full border border-white/10 px-4 py-2 text-sm text-white transition hover:bg-white/10"
-                >
-                  CSV exportieren
-                </a>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              {statusLinks.map((item) => {
-                const active = item.key === statusFilter
-                const href = `/settings/platform/memberships?status=${item.key}${
-                  qs.q ? `&q=${encodeURIComponent(qs.q)}` : ''
-                }`
-
-                return (
-                  <Link
-                    key={item.key}
-                    href={href}
-                    className={`rounded-full border px-4 py-2 text-sm transition ${
-                      active
-                        ? 'border-white bg-white text-black'
-                        : 'border-white/10 text-white hover:bg-white/10'
-                    }`}
-                  >
-                    {item.label}
-                  </Link>
-                )
-              })}
-            </div>
-          </div>
-
-          <section className="mb-6 grid gap-4 md:grid-cols-4">
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-              <div className="text-xs uppercase tracking-wide text-white/40">Aktiv</div>
-              <div className="mt-2 text-2xl font-semibold text-white">{activeCount}</div>
-            </div>
-
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-              <div className="text-xs uppercase tracking-wide text-white/40">
-                Kündigt zum Periodenende
-              </div>
-              <div className="mt-2 text-2xl font-semibold text-white">{scheduledCancelCount}</div>
-            </div>
-
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-              <div className="text-xs uppercase tracking-wide text-white/40">Gekündigt</div>
-              <div className="mt-2 text-2xl font-semibold text-white">{canceledCount}</div>
-            </div>
-
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-              <div className="text-xs uppercase tracking-wide text-white/40">Abgelaufen</div>
-              <div className="mt-2 text-2xl font-semibold text-white">{expiredCount}</div>
-            </div>
-          </section>
-
-          <section className="rounded-2xl border border-white/10 bg-white/5 p-4 md:p-5">
-            {filteredMemberships.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="min-w-full border-separate border-spacing-y-2">
-                  <thead>
-                    <tr className="text-left text-xs uppercase tracking-wide text-white/40">
-                      <th className="px-3 py-2">Creator</th>
-                      <th className="px-3 py-2">Member</th>
-                      <th className="px-3 py-2">Tier</th>
-                      <th className="px-3 py-2">Status</th>
-                      <th className="px-3 py-2">Periodenende</th>
-                      <th className="px-3 py-2">Kündigung</th>
-                      <th className="px-3 py-2">Provider</th>
-                      <th className="px-3 py-2">Kanal</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredMemberships.map((membership, index) => {
-                      const creator = creatorMap.get(membership.creator_id)
-                      const member = memberMap.get(membership.member_id)
-                      const tier = tierMap.get(membership.tier_id)
-
-                      return (
-                        <tr
-                          key={`${membership.creator_id}_${membership.member_id}_${membership.tier_id}_${index}`}
-                          className="rounded-2xl bg-black/20 text-sm text-white/80"
-                        >
-                          <td className="rounded-l-2xl px-3 py-3">
-                            <div className="font-medium text-white">
-                              {creator?.display_name || creator?.username || membership.creator_id}
-                            </div>
-                            <div className="text-xs text-white/45">
-                              @{creator?.username || 'creator'}
-                            </div>
-                          </td>
-
-                          <td className="px-3 py-3">
-                            <div className="font-medium text-white">
-                              {member?.display_name || member?.username || membership.member_id}
-                            </div>
-                            <div className="text-xs text-white/45">
-                              @{member?.username || 'member'}
-                            </div>
-                          </td>
-
-                          <td className="px-3 py-3">
-                            <div className="font-medium text-white">
-                              {tier?.name || membership.tier_id}
-                            </div>
-                            <div className="text-xs text-white/45">
-                              {tier ? formatMoney(tier.price_cents, tier.currency) : '—'}
-                            </div>
-                          </td>
-
-                          <td className="px-3 py-3">
-                            <span
-                              className={`inline-flex rounded-full px-2 py-1 text-xs ${statusBadgeClass(
-                                membership.status
-                              )}`}
-                            >
-                              {membership.status}
-                            </span>
-                          </td>
-
-                          <td className="px-3 py-3 whitespace-nowrap">
-                            {formatDate(membership.current_period_end)}
-                          </td>
-
-                          <td className="px-3 py-3">
-                            {membership.cancel_at_period_end ? (
-                              <div>
-                                <div className="text-amber-200">Zum Periodenende</div>
-                                <div className="text-xs text-white/45">
-                                  {formatDate(membership.cancel_at)}
-                                </div>
-                              </div>
-                            ) : (
-                              <span className="text-white/45">Keine</span>
-                            )}
-                          </td>
-
-                          <td className="px-3 py-3">
-                            <div className="text-white">{membership.provider || '—'}</div>
-                            <div className="max-w-[180px] truncate text-xs text-white/45">
-                              {membership.provider_subscription_id || '—'}
-                            </div>
-                          </td>
-
-                          <td className="rounded-r-2xl px-3 py-3">
-                            <Link
-                              href={`/channel/${membership.creator_id}`}
-                              className="rounded-full border border-white/10 px-3 py-1.5 text-xs text-white transition hover:bg-white/10"
-                            >
-                              Kanal
-                            </Link>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-5 text-sm text-white/50">
-                Keine Memberships für die aktuelle Suche oder den gewählten Status gefunden.
-              </div>
-            )}
-          </section>
-        </main>
-      </AppFrame>
+      <a
+        href={exportHref}
+        className="rounded-full border border-white/10 px-4 py-2 text-sm text-white transition hover:bg-white/10"
+      >
+        CSV exportieren
+      </a>
     </>
+  )
+
+  return (
+    <PlatformShell
+      userEmail={user.email}
+      current="memberships"
+      title="Memberships"
+      description="Plattformweite Übersicht über aktive, gekündigte und abgelaufene Mitgliedschaften."
+      actions={actions}
+    >
+      <div className="mb-6 flex flex-wrap gap-2">
+        {statusLinks.map((item) => {
+          const active = item.key === statusFilter
+          const href = `/settings/platform/memberships?status=${item.key}${
+            qs.q ? `&q=${encodeURIComponent(qs.q)}` : ''
+          }`
+
+          return (
+            <Link
+              key={item.key}
+              href={href}
+              className={`rounded-full border px-4 py-2 text-sm transition ${
+                active
+                  ? 'border-white bg-white text-black'
+                  : 'border-white/10 text-white hover:bg-white/10'
+              }`}
+            >
+              {item.label}
+            </Link>
+          )
+        })}
+      </div>
+
+      <section className="mb-6 grid gap-4 md:grid-cols-4">
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+          <div className="text-xs uppercase tracking-wide text-white/40">Aktiv</div>
+          <div className="mt-2 text-2xl font-semibold text-white">{activeCount}</div>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+          <div className="text-xs uppercase tracking-wide text-white/40">
+            Kündigt zum Periodenende
+          </div>
+          <div className="mt-2 text-2xl font-semibold text-white">{scheduledCancelCount}</div>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+          <div className="text-xs uppercase tracking-wide text-white/40">Gekündigt</div>
+          <div className="mt-2 text-2xl font-semibold text-white">{canceledCount}</div>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+          <div className="text-xs uppercase tracking-wide text-white/40">Abgelaufen</div>
+          <div className="mt-2 text-2xl font-semibold text-white">{expiredCount}</div>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-white/10 bg-white/5 p-4 md:p-5">
+        {filteredMemberships.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="min-w-full border-separate border-spacing-y-2">
+              <thead>
+                <tr className="text-left text-xs uppercase tracking-wide text-white/40">
+                  <th className="px-3 py-2">Creator</th>
+                  <th className="px-3 py-2">Member</th>
+                  <th className="px-3 py-2">Tier</th>
+                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">Periodenende</th>
+                  <th className="px-3 py-2">Kündigung</th>
+                  <th className="px-3 py-2">Provider</th>
+                  <th className="px-3 py-2">Kanal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredMemberships.map((membership, index) => {
+                  const creator = creatorMap.get(membership.creator_id)
+                  const member = memberMap.get(membership.member_id)
+                  const tier = tierMap.get(membership.tier_id)
+
+                  return (
+                    <tr
+                      key={`${membership.creator_id}_${membership.member_id}_${membership.tier_id}_${index}`}
+                      className="rounded-2xl bg-black/20 text-sm text-white/80"
+                    >
+                      <td className="rounded-l-2xl px-3 py-3">
+                        <div className="font-medium text-white">
+                          {creator?.display_name || creator?.username || membership.creator_id}
+                        </div>
+                        <div className="text-xs text-white/45">
+                          @{creator?.username || 'creator'}
+                        </div>
+                      </td>
+
+                      <td className="px-3 py-3">
+                        <div className="font-medium text-white">
+                          {member?.display_name || member?.username || membership.member_id}
+                        </div>
+                        <div className="text-xs text-white/45">
+                          @{member?.username || 'member'}
+                        </div>
+                      </td>
+
+                      <td className="px-3 py-3">
+                        <div className="font-medium text-white">
+                          {tier?.name || membership.tier_id}
+                        </div>
+                        <div className="text-xs text-white/45">
+                          {tier ? formatMoney(tier.price_cents, tier.currency) : '—'}
+                        </div>
+                      </td>
+
+                      <td className="px-3 py-3">
+                        <span
+                          className={`inline-flex rounded-full px-2 py-1 text-xs ${statusBadgeClass(
+                            membership.status
+                          )}`}
+                        >
+                          {membership.status}
+                        </span>
+                      </td>
+
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        {formatDate(membership.current_period_end)}
+                      </td>
+
+                      <td className="px-3 py-3">
+                        {membership.cancel_at_period_end ? (
+                          <div>
+                            <div className="text-amber-200">Zum Periodenende</div>
+                            <div className="text-xs text-white/45">
+                              {formatDate(membership.cancel_at)}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-white/45">Keine</span>
+                        )}
+                      </td>
+
+                      <td className="px-3 py-3">
+                        <div className="text-white">{membership.provider || '—'}</div>
+                        <div className="max-w-[180px] truncate text-xs text-white/45">
+                          {membership.provider_subscription_id || '—'}
+                        </div>
+                      </td>
+
+                      <td className="rounded-r-2xl px-3 py-3">
+                        <Link
+                          href={`/channel/${membership.creator_id}`}
+                          className="rounded-full border border-white/10 px-3 py-1.5 text-xs text-white transition hover:bg-white/10"
+                        >
+                          Kanal
+                        </Link>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-white/10 bg-black/20 p-5 text-sm text-white/50">
+            Keine Memberships für die aktuelle Suche oder den gewählten Status gefunden.
+          </div>
+        )}
+      </section>
+    </PlatformShell>
   )
 }

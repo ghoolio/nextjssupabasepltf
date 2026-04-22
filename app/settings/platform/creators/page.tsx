@@ -1,10 +1,7 @@
 import Link from 'next/link'
-import { redirect } from 'next/navigation'
-import SiteHeader from '@/components/site-header'
-import AppFrame from '@/components/app-frame'
-import { createClient } from '@/lib/supabase-server'
+import PlatformShell from '@/components/platform-shell'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { requirePlatformAdmin } from '@/lib/platform-admin'
+import { requirePlatformSupportAccess } from '@/lib/platform-admin'
 
 type ProfileRow = {
   id: string
@@ -77,7 +74,7 @@ export default async function SettingsPlatformCreatorsPage({
     revenue?: string
   }>
 }) {
-  const { user } = await requirePlatformAdmin()
+  const { user } = await requirePlatformSupportAccess()
   const qs = await searchParams
 
   const connectFilter = (['all', 'connected', 'missing'].includes(qs.connect || '')
@@ -147,7 +144,10 @@ export default async function SettingsPlatformCreatorsPage({
     throw new Error(tierError.message)
   }
 
-  const statsMap = new Map<string, Omit<CreatorStats, 'total_gross' | 'total_fees' | 'total_net' | 'total_paid_count'>>()
+  const statsMap = new Map<
+    string,
+    Omit<CreatorStats, 'total_gross' | 'total_fees' | 'total_net' | 'total_paid_count'>
+  >()
 
   for (const profile of profiles ?? []) {
     statsMap.set(profile.id, {
@@ -226,7 +226,9 @@ export default async function SettingsPlatformCreatorsPage({
     (c) => c.video_gross + c.membership_gross > 0
   ).length
 
-  const withParams = (next: Partial<Record<'connect' | 'memberships' | 'revenue' | 'q', string>>) => {
+  const withParams = (
+    next: Partial<Record<'connect' | 'memberships' | 'revenue' | 'q', string>>
+  ) => {
     const params = new URLSearchParams()
 
     const connect = next.connect ?? connectFilter
@@ -255,272 +257,253 @@ export default async function SettingsPlatformCreatorsPage({
     })()
   }`
 
-  return (
+  const actions = (
     <>
-      <SiteHeader userEmail={user.email} />
-      <AppFrame>
-        <main className="px-4 py-6 pb-24 md:px-6 lg:pb-6">
-          <div className="mb-6 flex flex-col gap-4">
-            <div className="flex flex-wrap items-center gap-3 text-sm text-white/60">
-              <Link
-                href="/settings/platform"
-                className="rounded-full border border-white/10 px-4 py-2 transition hover:bg-white/10"
-              >
-                ← Zurück zu Plattform
-              </Link>
-            </div>
+      <form className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <input
+          type="text"
+          name="q"
+          defaultValue={qs.q || ''}
+          placeholder="Creator suchen"
+          className="w-full rounded-full border border-white/10 bg-black/20 px-4 py-2 text-sm text-white outline-none placeholder:text-white/35 sm:w-72"
+        />
+        <input type="hidden" name="connect" value={connectFilter} />
+        <input type="hidden" name="memberships" value={membershipFilter} />
+        <input type="hidden" name="revenue" value={revenueFilter} />
+        <button
+          type="submit"
+          className="rounded-full bg-white px-4 py-2 text-sm font-medium text-black transition hover:opacity-90"
+        >
+          Suchen
+        </button>
+      </form>
 
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-              <div>
-                <h1 className="text-2xl font-semibold tracking-tight text-white">
-                  Creator-Übersicht
-                </h1>
-                <p className="mt-1 text-sm text-white/50">
-                  Umsatz, Gebühren und Aktivität pro Creator.
-                </p>
-              </div>
-
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <form className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                  <input
-                    type="text"
-                    name="q"
-                    defaultValue={qs.q || ''}
-                    placeholder="Creator suchen"
-                    className="w-full rounded-full border border-white/10 bg-black/20 px-4 py-2 text-sm text-white outline-none placeholder:text-white/35 sm:w-72"
-                  />
-                  <input type="hidden" name="connect" value={connectFilter} />
-                  <input type="hidden" name="memberships" value={membershipFilter} />
-                  <input type="hidden" name="revenue" value={revenueFilter} />
-                  <button
-                    type="submit"
-                    className="rounded-full bg-white px-4 py-2 text-sm font-medium text-black transition hover:opacity-90"
-                  >
-                    Suchen
-                  </button>
-                </form>
-
-                <a
-                  href={exportHref}
-                  className="rounded-full border border-white/10 px-4 py-2 text-sm text-white transition hover:bg-white/10"
-                >
-                  CSV exportieren
-                </a>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Link
-                href={withParams({ connect: 'all' })}
-                className={`rounded-full border px-4 py-2 text-sm transition ${
-                  connectFilter === 'all'
-                    ? 'border-white bg-white text-black'
-                    : 'border-white/10 text-white hover:bg-white/10'
-                }`}
-              >
-                Alle Connect
-              </Link>
-              <Link
-                href={withParams({ connect: 'connected' })}
-                className={`rounded-full border px-4 py-2 text-sm transition ${
-                  connectFilter === 'connected'
-                    ? 'border-white bg-white text-black'
-                    : 'border-white/10 text-white hover:bg-white/10'
-                }`}
-              >
-                Verbunden
-              </Link>
-              <Link
-                href={withParams({ connect: 'missing' })}
-                className={`rounded-full border px-4 py-2 text-sm transition ${
-                  connectFilter === 'missing'
-                    ? 'border-white bg-white text-black'
-                    : 'border-white/10 text-white hover:bg-white/10'
-                }`}
-              >
-                Fehlt
-              </Link>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Link
-                href={withParams({ memberships: 'all' })}
-                className={`rounded-full border px-4 py-2 text-sm transition ${
-                  membershipFilter === 'all'
-                    ? 'border-white bg-white text-black'
-                    : 'border-white/10 text-white hover:bg-white/10'
-                }`}
-              >
-                Alle Memberships
-              </Link>
-              <Link
-                href={withParams({ memberships: 'enabled' })}
-                className={`rounded-full border px-4 py-2 text-sm transition ${
-                  membershipFilter === 'enabled'
-                    ? 'border-white bg-white text-black'
-                    : 'border-white/10 text-white hover:bg-white/10'
-                }`}
-              >
-                Membership aktiv
-              </Link>
-              <Link
-                href={withParams({ memberships: 'disabled' })}
-                className={`rounded-full border px-4 py-2 text-sm transition ${
-                  membershipFilter === 'disabled'
-                    ? 'border-white bg-white text-black'
-                    : 'border-white/10 text-white hover:bg-white/10'
-                }`}
-              >
-                Membership aus
-              </Link>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Link
-                href={withParams({ revenue: 'all' })}
-                className={`rounded-full border px-4 py-2 text-sm transition ${
-                  revenueFilter === 'all'
-                    ? 'border-white bg-white text-black'
-                    : 'border-white/10 text-white hover:bg-white/10'
-                }`}
-              >
-                Alle Umsätze
-              </Link>
-              <Link
-                href={withParams({ revenue: 'with' })}
-                className={`rounded-full border px-4 py-2 text-sm transition ${
-                  revenueFilter === 'with'
-                    ? 'border-white bg-white text-black'
-                    : 'border-white/10 text-white hover:bg-white/10'
-                }`}
-              >
-                Mit Umsatz
-              </Link>
-              <Link
-                href={withParams({ revenue: 'without' })}
-                className={`rounded-full border px-4 py-2 text-sm transition ${
-                  revenueFilter === 'without'
-                    ? 'border-white bg-white text-black'
-                    : 'border-white/10 text-white hover:bg-white/10'
-                }`}
-              >
-                Ohne Umsatz
-              </Link>
-            </div>
-          </div>
-
-          <section className="mb-6 grid gap-4 md:grid-cols-4">
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-              <div className="text-xs uppercase tracking-wide text-white/40">Creator gesamt</div>
-              <div className="mt-2 text-2xl font-semibold text-white">{totalCreators}</div>
-            </div>
-
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-              <div className="text-xs uppercase tracking-wide text-white/40">Stripe verbunden</div>
-              <div className="mt-2 text-2xl font-semibold text-white">{connectedCreators}</div>
-            </div>
-
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-              <div className="text-xs uppercase tracking-wide text-white/40">Membership aktiv</div>
-              <div className="mt-2 text-2xl font-semibold text-white">{membershipCreators}</div>
-            </div>
-
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-              <div className="text-xs uppercase tracking-wide text-white/40">Mit Umsatz</div>
-              <div className="mt-2 text-2xl font-semibold text-white">{revenueCreators}</div>
-            </div>
-          </section>
-
-          <section className="rounded-2xl border border-white/10 bg-white/5 p-4 md:p-5">
-            {creators.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="min-w-full border-separate border-spacing-y-2">
-                  <thead>
-                    <tr className="text-left text-xs uppercase tracking-wide text-white/40">
-                      <th className="px-3 py-2">Creator</th>
-                      <th className="px-3 py-2">Connect</th>
-                      <th className="px-3 py-2">Tiers</th>
-                      <th className="px-3 py-2">Brutto</th>
-                      <th className="px-3 py-2">Gebühren</th>
-                      <th className="px-3 py-2">Netto</th>
-                      <th className="px-3 py-2">Zahlungen</th>
-                      <th className="px-3 py-2">Details</th>
-                      <th className="px-3 py-2">Kanal</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {creators.map((creator) => (
-                      <tr
-                        key={creator.creator_id}
-                        className="rounded-2xl bg-black/20 text-sm text-white/80"
-                      >
-                        <td className="rounded-l-2xl px-3 py-3">
-                          <div className="font-medium text-white">{creator.display_name}</div>
-                          <div className="text-xs text-white/45">@{creator.username}</div>
-                        </td>
-
-                        <td className="px-3 py-3">
-                          <span
-                            className={`inline-flex rounded-full px-2 py-1 text-xs ${
-                              creator.stripe_connected
-                                ? 'border border-emerald-400/20 bg-emerald-400/10 text-emerald-200'
-                                : 'border border-amber-400/20 bg-amber-400/10 text-amber-200'
-                            }`}
-                          >
-                            {creator.stripe_connected ? 'Verbunden' : 'Fehlt'}
-                          </span>
-                        </td>
-
-                        <td className="px-3 py-3 whitespace-nowrap">
-                          {creator.active_tier_count}
-                        </td>
-
-                        <td className="px-3 py-3 whitespace-nowrap">
-                          {formatMoney(creator.total_gross)}
-                        </td>
-
-                        <td className="px-3 py-3 whitespace-nowrap">
-                          {formatMoney(creator.total_fees)}
-                        </td>
-
-                        <td className="px-3 py-3 whitespace-nowrap">
-                          {formatMoney(creator.total_net)}
-                        </td>
-
-                        <td className="px-3 py-3 whitespace-nowrap">
-                          {creator.total_paid_count}
-                        </td>
-
-                        <td className="px-3 py-3">
-                          <Link
-                            href={`/settings/platform/creators/${creator.creator_id}`}
-                            className="rounded-full border border-white/10 px-3 py-1.5 text-xs text-white transition hover:bg-white/10"
-                          >
-                            Details
-                          </Link>
-                        </td>
-
-                        <td className="rounded-r-2xl px-3 py-3">
-                          <Link
-                            href={`/channel/${creator.creator_id}`}
-                            className="rounded-full border border-white/10 px-3 py-1.5 text-xs text-white transition hover:bg-white/10"
-                          >
-                            Kanal
-                          </Link>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-5 text-sm text-white/50">
-                Keine Creator für die aktuelle Suche oder Filter gefunden.
-              </div>
-            )}
-          </section>
-        </main>
-      </AppFrame>
+      <a
+        href={exportHref}
+        className="rounded-full border border-white/10 px-4 py-2 text-sm text-white transition hover:bg-white/10"
+      >
+        CSV exportieren
+      </a>
     </>
+  )
+
+  return (
+    <PlatformShell
+      userEmail={user.email}
+      current="creators"
+      title="Creator-Übersicht"
+      description="Umsatz, Gebühren und Aktivität pro Creator."
+      actions={actions}
+    >
+      <div className="mb-6 flex flex-wrap gap-2">
+        <Link
+          href={withParams({ connect: 'all' })}
+          className={`rounded-full border px-4 py-2 text-sm transition ${
+            connectFilter === 'all'
+              ? 'border-white bg-white text-black'
+              : 'border-white/10 text-white hover:bg-white/10'
+          }`}
+        >
+          Alle Connect
+        </Link>
+        <Link
+          href={withParams({ connect: 'connected' })}
+          className={`rounded-full border px-4 py-2 text-sm transition ${
+            connectFilter === 'connected'
+              ? 'border-white bg-white text-black'
+              : 'border-white/10 text-white hover:bg-white/10'
+          }`}
+        >
+          Verbunden
+        </Link>
+        <Link
+          href={withParams({ connect: 'missing' })}
+          className={`rounded-full border px-4 py-2 text-sm transition ${
+            connectFilter === 'missing'
+              ? 'border-white bg-white text-black'
+              : 'border-white/10 text-white hover:bg-white/10'
+          }`}
+        >
+          Fehlt
+        </Link>
+      </div>
+
+      <div className="mb-6 flex flex-wrap gap-2">
+        <Link
+          href={withParams({ memberships: 'all' })}
+          className={`rounded-full border px-4 py-2 text-sm transition ${
+            membershipFilter === 'all'
+              ? 'border-white bg-white text-black'
+              : 'border-white/10 text-white hover:bg-white/10'
+          }`}
+        >
+          Alle Memberships
+        </Link>
+        <Link
+          href={withParams({ memberships: 'enabled' })}
+          className={`rounded-full border px-4 py-2 text-sm transition ${
+            membershipFilter === 'enabled'
+              ? 'border-white bg-white text-black'
+              : 'border-white/10 text-white hover:bg-white/10'
+          }`}
+        >
+          Membership aktiv
+        </Link>
+        <Link
+          href={withParams({ memberships: 'disabled' })}
+          className={`rounded-full border px-4 py-2 text-sm transition ${
+            membershipFilter === 'disabled'
+              ? 'border-white bg-white text-black'
+              : 'border-white/10 text-white hover:bg-white/10'
+          }`}
+        >
+          Membership aus
+        </Link>
+      </div>
+
+      <div className="mb-6 flex flex-wrap gap-2">
+        <Link
+          href={withParams({ revenue: 'all' })}
+          className={`rounded-full border px-4 py-2 text-sm transition ${
+            revenueFilter === 'all'
+              ? 'border-white bg-white text-black'
+              : 'border-white/10 text-white hover:bg-white/10'
+          }`}
+        >
+          Alle Umsätze
+        </Link>
+        <Link
+          href={withParams({ revenue: 'with' })}
+          className={`rounded-full border px-4 py-2 text-sm transition ${
+            revenueFilter === 'with'
+              ? 'border-white bg-white text-black'
+              : 'border-white/10 text-white hover:bg-white/10'
+          }`}
+        >
+          Mit Umsatz
+        </Link>
+        <Link
+          href={withParams({ revenue: 'without' })}
+          className={`rounded-full border px-4 py-2 text-sm transition ${
+            revenueFilter === 'without'
+              ? 'border-white bg-white text-black'
+              : 'border-white/10 text-white hover:bg-white/10'
+          }`}
+        >
+          Ohne Umsatz
+        </Link>
+      </div>
+
+      <section className="mb-6 grid gap-4 md:grid-cols-4">
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+          <div className="text-xs uppercase tracking-wide text-white/40">Creator gesamt</div>
+          <div className="mt-2 text-2xl font-semibold text-white">{totalCreators}</div>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+          <div className="text-xs uppercase tracking-wide text-white/40">Stripe verbunden</div>
+          <div className="mt-2 text-2xl font-semibold text-white">{connectedCreators}</div>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+          <div className="text-xs uppercase tracking-wide text-white/40">Membership aktiv</div>
+          <div className="mt-2 text-2xl font-semibold text-white">{membershipCreators}</div>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+          <div className="text-xs uppercase tracking-wide text-white/40">Mit Umsatz</div>
+          <div className="mt-2 text-2xl font-semibold text-white">{revenueCreators}</div>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-white/10 bg-white/5 p-4 md:p-5">
+        {creators.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="min-w-full border-separate border-spacing-y-2">
+              <thead>
+                <tr className="text-left text-xs uppercase tracking-wide text-white/40">
+                  <th className="px-3 py-2">Creator</th>
+                  <th className="px-3 py-2">Connect</th>
+                  <th className="px-3 py-2">Tiers</th>
+                  <th className="px-3 py-2">Brutto</th>
+                  <th className="px-3 py-2">Gebühren</th>
+                  <th className="px-3 py-2">Netto</th>
+                  <th className="px-3 py-2">Zahlungen</th>
+                  <th className="px-3 py-2">Details</th>
+                  <th className="px-3 py-2">Kanal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {creators.map((creator) => (
+                  <tr
+                    key={creator.creator_id}
+                    className="rounded-2xl bg-black/20 text-sm text-white/80"
+                  >
+                    <td className="rounded-l-2xl px-3 py-3">
+                      <div className="font-medium text-white">{creator.display_name}</div>
+                      <div className="text-xs text-white/45">@{creator.username}</div>
+                    </td>
+
+                    <td className="px-3 py-3">
+                      <span
+                        className={`inline-flex rounded-full px-2 py-1 text-xs ${
+                          creator.stripe_connected
+                            ? 'border border-emerald-400/20 bg-emerald-400/10 text-emerald-200'
+                            : 'border border-amber-400/20 bg-amber-400/10 text-amber-200'
+                        }`}
+                      >
+                        {creator.stripe_connected ? 'Verbunden' : 'Fehlt'}
+                      </span>
+                    </td>
+
+                    <td className="px-3 py-3 whitespace-nowrap">
+                      {creator.active_tier_count}
+                    </td>
+
+                    <td className="px-3 py-3 whitespace-nowrap">
+                      {formatMoney(creator.total_gross)}
+                    </td>
+
+                    <td className="px-3 py-3 whitespace-nowrap">
+                      {formatMoney(creator.total_fees)}
+                    </td>
+
+                    <td className="px-3 py-3 whitespace-nowrap">
+                      {formatMoney(creator.total_net)}
+                    </td>
+
+                    <td className="px-3 py-3 whitespace-nowrap">
+                      {creator.total_paid_count}
+                    </td>
+
+                    <td className="px-3 py-3">
+                      <Link
+                        href={`/settings/platform/creators/${creator.creator_id}`}
+                        className="rounded-full border border-white/10 px-3 py-1.5 text-xs text-white transition hover:bg-white/10"
+                      >
+                        Details
+                      </Link>
+                    </td>
+
+                    <td className="rounded-r-2xl px-3 py-3">
+                      <Link
+                        href={`/channel/${creator.creator_id}`}
+                        className="rounded-full border border-white/10 px-3 py-1.5 text-xs text-white transition hover:bg-white/10"
+                      >
+                        Kanal
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-white/10 bg-black/20 p-5 text-sm text-white/50">
+            Keine Creator für die aktuelle Suche oder Filter gefunden.
+          </div>
+        )}
+      </section>
+    </PlatformShell>
   )
 }

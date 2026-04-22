@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { requirePlatformAdminApi } from '@/lib/platform-admin'
+import { requirePlatformSupportAccessApi } from '@/lib/platform-admin'
 
 type MembershipStatus = 'active' | 'canceled' | 'expired'
 type StatusFilter = MembershipStatus | 'all'
@@ -115,10 +115,10 @@ function toCsv(rows: MembershipCsvRow[]) {
 }
 
 export async function GET(req: Request) {
-  const adminCheck = await requirePlatformAdminApi()
+  const access = await requirePlatformSupportAccessApi()
 
-  if (!adminCheck.ok) {
-    return new NextResponse(adminCheck.message, { status: adminCheck.status })
+  if (!access.ok) {
+    return new NextResponse(access.message, { status: access.status })
   }
 
   const { searchParams } = new URL(req.url)

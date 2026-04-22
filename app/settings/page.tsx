@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import SiteHeader from '@/components/site-header'
 import AppFrame from '@/components/app-frame'
 import { createClient } from '@/lib/supabase-server'
-import { getPlatformAdminState } from '@/lib/platform-admin'
+import { getPlatformAccessState } from '@/lib/platform-admin'
 
 type ProfileRow = {
   id: string
@@ -28,7 +28,12 @@ export default async function SettingsPage() {
     redirect('/login')
   }
 
-  const { isPlatformAdmin } = await getPlatformAdminState()
+  const {
+    platformRole,
+    canAccessPlatformSupport,
+    canAccessPlatformFinance,
+    canAccessPlatformAdmin,
+  } = await getPlatformAccessState()
 
   const { data: profileRows } = await supabase
     .from('profiles')
@@ -43,6 +48,9 @@ export default async function SettingsPage() {
   const avatarUrl = profile?.avatar_url
     ? supabase.storage.from('profile-assets').getPublicUrl(profile.avatar_url).data.publicUrl
     : null
+
+  const showPlatformSection =
+    canAccessPlatformSupport || canAccessPlatformFinance || canAccessPlatformAdmin
 
   return (
     <>
@@ -96,18 +104,6 @@ export default async function SettingsPage() {
                   </div>
                 </Link>
 
-                {isPlatformAdmin ? (
-                  <Link
-                    href="/settings/platform"
-                    className="rounded-2xl border border-white/10 bg-black/20 p-4 transition hover:bg-white/10"
-                  >
-                    <div className="text-sm font-medium text-white">Plattform</div>
-                    <div className="mt-1 text-sm text-white/45">
-                      Interne Umsatz-, Gebühren- und Creator-Auszahlungsübersicht
-                    </div>
-                  </Link>
-                ) : null}
-
                 <Link
                   href={`/channel/${user.id}`}
                   className="rounded-2xl border border-white/10 bg-black/20 p-4 transition hover:bg-white/10"
@@ -138,6 +134,75 @@ export default async function SettingsPage() {
                   </div>
                 </Link>
               </div>
+
+              {showPlatformSection ? (
+                <div className="mt-8">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-base font-semibold text-white">Plattform</h3>
+                      <p className="mt-1 text-sm text-white/45">
+                        Interne Bereiche je nach Rolle.
+                      </p>
+                    </div>
+
+                    <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-white/70">
+                      Rolle: {platformRole}
+                    </span>
+                  </div>
+
+                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                    {canAccessPlatformFinance ? (
+                      <>
+                        <Link
+                          href="/settings/platform"
+                          className="rounded-2xl border border-white/10 bg-black/20 p-4 transition hover:bg-white/10"
+                        >
+                          <div className="text-sm font-medium text-white">
+                            Plattform-Dashboard
+                          </div>
+                          <div className="mt-1 text-sm text-white/45">
+                            Umsatz, Gebühren und Creator-Auszahlungen
+                          </div>
+                        </Link>
+
+                        <Link
+                          href="/settings/platform/transactions"
+                          className="rounded-2xl border border-white/10 bg-black/20 p-4 transition hover:bg-white/10"
+                        >
+                          <div className="text-sm font-medium text-white">Transaktionen</div>
+                          <div className="mt-1 text-sm text-white/45">
+                            Einzelposten, Zeiträume und Exporte
+                          </div>
+                        </Link>
+                      </>
+                    ) : null}
+
+                    {canAccessPlatformSupport ? (
+                      <>
+                        <Link
+                          href="/settings/platform/memberships"
+                          className="rounded-2xl border border-white/10 bg-black/20 p-4 transition hover:bg-white/10"
+                        >
+                          <div className="text-sm font-medium text-white">Memberships</div>
+                          <div className="mt-1 text-sm text-white/45">
+                            Aktive, gekündigte und abgelaufene Mitgliedschaften
+                          </div>
+                        </Link>
+
+                        <Link
+                          href="/settings/platform/creators"
+                          className="rounded-2xl border border-white/10 bg-black/20 p-4 transition hover:bg-white/10"
+                        >
+                          <div className="text-sm font-medium text-white">Creator-Übersicht</div>
+                          <div className="mt-1 text-sm text-white/45">
+                            Creator-Drilldowns, Status und Detailansichten
+                          </div>
+                        </Link>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
             </section>
 
             <aside className="space-y-4">
@@ -198,6 +263,28 @@ export default async function SettingsPage() {
                   <div>Moderation</div>
                 </div>
               </section>
+
+              {showPlatformSection ? (
+                <section className="rounded-3xl border border-white/10 bg-white/5 p-6">
+                  <h2 className="text-sm font-medium uppercase tracking-wide text-white/45">
+                    Plattformzugriff
+                  </h2>
+                  <div className="mt-4 space-y-2 text-sm text-white/55">
+                    <div>
+                      Rolle: <span className="text-white">{platformRole}</span>
+                    </div>
+                    <div>
+                      Support: <span className="text-white">{canAccessPlatformSupport ? 'Ja' : 'Nein'}</span>
+                    </div>
+                    <div>
+                      Finance: <span className="text-white">{canAccessPlatformFinance ? 'Ja' : 'Nein'}</span>
+                    </div>
+                    <div>
+                      Vollzugriff: <span className="text-white">{canAccessPlatformAdmin ? 'Ja' : 'Nein'}</span>
+                    </div>
+                  </div>
+                </section>
+              ) : null}
             </aside>
           </div>
         </main>

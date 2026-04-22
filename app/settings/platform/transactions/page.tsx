@@ -1,10 +1,7 @@
 import Link from 'next/link'
-import { redirect } from 'next/navigation'
-import SiteHeader from '@/components/site-header'
-import AppFrame from '@/components/app-frame'
-import { createClient } from '@/lib/supabase-server'
+import PlatformShell from '@/components/platform-shell'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { requirePlatformAdmin } from '@/lib/platform-admin'
+import { requirePlatformFinanceAccess } from '@/lib/platform-admin'
 
 type VideoPurchaseRow = {
   video_id: string
@@ -101,7 +98,7 @@ export default async function SettingsPlatformTransactionsPage({
 }: {
   searchParams: Promise<{ range?: string }>
 }) {
-  const { user } = await requirePlatformAdmin()
+  const { user } = await requirePlatformFinanceAccess()
   const qs = await searchParams
 
   const range = (['today', '7d', '30d', 'all'].includes(qs.range || '')
@@ -184,122 +181,104 @@ export default async function SettingsPlatformTransactionsPage({
     { key: 'all', label: 'Gesamt' },
   ]
 
-  return (
+  const actions = (
     <>
-      <SiteHeader userEmail={user.email} />
-      <AppFrame>
-        <main className="px-4 py-6 pb-24 md:px-6 lg:pb-6">
-          <div className="mb-6 flex flex-col gap-4">
-            <div className="flex flex-wrap items-center gap-3 text-sm text-white/60">
-              <Link
-                href={`/settings/platform?range=${range}`}
-                className="rounded-full border border-white/10 px-4 py-2 transition hover:bg-white/10"
-              >
-                ← Zurück zu Plattform
-              </Link>
-            </div>
+      {rangeLinks.map((item) => {
+        const active = item.key === range
+        return (
+          <Link
+            key={item.key}
+            href={`/settings/platform/transactions?range=${item.key}`}
+            className={`rounded-full border px-4 py-2 text-sm transition ${
+              active
+                ? 'border-white bg-white text-black'
+                : 'border-white/10 text-white hover:bg-white/10'
+            }`}
+          >
+            {item.label}
+          </Link>
+        )
+      })}
 
-            <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-              <div>
-                <h1 className="text-2xl font-semibold tracking-tight text-white">
-                  Transaktionen
-                </h1>
-                <p className="mt-1 text-sm text-white/50">
-                  Einzelposten aus Einzelkäufen und Membership-Zahlungen.
-                </p>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                {rangeLinks.map((item) => {
-                  const active = item.key === range
-                  return (
-                    <Link
-                      key={item.key}
-                      href={`/settings/platform/transactions?range=${item.key}`}
-                      className={`rounded-full border px-4 py-2 text-sm transition ${
-                        active
-                          ? 'border-white bg-white text-black'
-                          : 'border-white/10 text-white hover:bg-white/10'
-                      }`}
-                    >
-                      {item.label}
-                    </Link>
-                  )
-                })}
-
-                <a
-                  href={`/api/platform/transactions/export?range=${range}`}
-                  className="rounded-full bg-white px-4 py-2 text-sm font-medium text-black transition hover:opacity-90"
-                >
-                  CSV exportieren
-                </a>
-              </div>
-            </div>
-          </div>
-
-          <section className="rounded-2xl border border-white/10 bg-white/5 p-4 md:p-5">
-            {transactions.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="min-w-full border-separate border-spacing-y-2">
-                  <thead>
-                    <tr className="text-left text-xs uppercase tracking-wide text-white/40">
-                      <th className="px-3 py-2">Datum</th>
-                      <th className="px-3 py-2">Typ</th>
-                      <th className="px-3 py-2">Status</th>
-                      <th className="px-3 py-2">Brutto</th>
-                      <th className="px-3 py-2">Gebühr</th>
-                      <th className="px-3 py-2">Netto</th>
-                      <th className="px-3 py-2">Referenz</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {transactions.map((tx) => (
-                      <tr
-                        key={tx.id}
-                        className="rounded-2xl bg-black/20 text-sm text-white/80"
-                      >
-                        <td className="rounded-l-2xl px-3 py-3 whitespace-nowrap">
-                          {formatDate(tx.occurred_at)}
-                        </td>
-                        <td className="px-3 py-3">
-                          {tx.kind === 'video_purchase' ? 'Einzelkauf' : 'Membership'}
-                        </td>
-                        <td className="px-3 py-3">
-                          <span
-                            className={`inline-flex rounded-full px-2 py-1 text-xs ${statusBadgeClass(
-                              tx.status
-                            )}`}
-                          >
-                            {tx.status}
-                          </span>
-                        </td>
-                        <td className="px-3 py-3 whitespace-nowrap">
-                          {formatMoney(tx.gross_cents, tx.currency)}
-                        </td>
-                        <td className="px-3 py-3 whitespace-nowrap">
-                          {formatMoney(tx.fee_cents, tx.currency)}
-                        </td>
-                        <td className="px-3 py-3 whitespace-nowrap">
-                          {formatMoney(tx.net_cents, tx.currency)}
-                        </td>
-                        <td className="rounded-r-2xl px-3 py-3">
-                          <div className="max-w-[240px] truncate text-white/60">
-                            {tx.reference}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-5 text-sm text-white/50">
-                Keine Transaktionen im gewählten Zeitraum vorhanden.
-              </div>
-            )}
-          </section>
-        </main>
-      </AppFrame>
+      <a
+        href={`/api/platform/transactions/export?range=${range}`}
+        className="rounded-full bg-white px-4 py-2 text-sm font-medium text-black transition hover:opacity-90"
+      >
+        CSV exportieren
+      </a>
     </>
+  )
+
+  return (
+    <PlatformShell
+      userEmail={user.email}
+      current="transactions"
+      range={range}
+      title="Transaktionen"
+      description="Einzelposten aus Einzelkäufen und Membership-Zahlungen."
+      actions={actions}
+    >
+      <section className="rounded-2xl border border-white/10 bg-white/5 p-4 md:p-5">
+        {transactions.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="min-w-full border-separate border-spacing-y-2">
+              <thead>
+                <tr className="text-left text-xs uppercase tracking-wide text-white/40">
+                  <th className="px-3 py-2">Datum</th>
+                  <th className="px-3 py-2">Typ</th>
+                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">Brutto</th>
+                  <th className="px-3 py-2">Gebühr</th>
+                  <th className="px-3 py-2">Netto</th>
+                  <th className="px-3 py-2">Referenz</th>
+                </tr>
+              </thead>
+              <tbody>
+                {transactions.map((tx) => (
+                  <tr
+                    key={tx.id}
+                    className="rounded-2xl bg-black/20 text-sm text-white/80"
+                  >
+                    <td className="rounded-l-2xl px-3 py-3 whitespace-nowrap">
+                      {formatDate(tx.occurred_at)}
+                    </td>
+                    <td className="px-3 py-3">
+                      {tx.kind === 'video_purchase' ? 'Einzelkauf' : 'Membership'}
+                    </td>
+                    <td className="px-3 py-3">
+                      <span
+                        className={`inline-flex rounded-full px-2 py-1 text-xs ${statusBadgeClass(
+                          tx.status
+                        )}`}
+                      >
+                        {tx.status}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3 whitespace-nowrap">
+                      {formatMoney(tx.gross_cents, tx.currency)}
+                    </td>
+                    <td className="px-3 py-3 whitespace-nowrap">
+                      {formatMoney(tx.fee_cents, tx.currency)}
+                    </td>
+                    <td className="px-3 py-3 whitespace-nowrap">
+                      {formatMoney(tx.net_cents, tx.currency)}
+                    </td>
+                    <td className="rounded-r-2xl px-3 py-3">
+                      <div className="max-w-[240px] truncate text-white/60">
+                        {tx.reference}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-white/10 bg-black/20 p-5 text-sm text-white/50">
+            Keine Transaktionen im gewählten Zeitraum vorhanden.
+          </div>
+        )}
+      </section>
+    </PlatformShell>
   )
 }

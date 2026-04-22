@@ -1,10 +1,9 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import SiteHeader from '@/components/site-header'
-import AppFrame from '@/components/app-frame'
+import PlatformShell from '@/components/platform-shell'
 import { createClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { requirePlatformAdmin } from '@/lib/platform-admin'
+import { requirePlatformSupportAccess } from '@/lib/platform-admin'
 
 type ProfileRow = {
   id: string
@@ -104,7 +103,7 @@ export default async function SettingsPlatformCreatorDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const { user } = await requirePlatformAdmin()
+  const { user } = await requirePlatformSupportAccess()
   const supabase = await createClient()
 
   const { data: profileRows, error: profileError } = await supabaseAdmin
@@ -260,275 +259,269 @@ export default async function SettingsPlatformCreatorDetailPage({
     .sort((a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime())
     .slice(0, 12)
 
-  return (
+  const actions = (
     <>
-      <SiteHeader userEmail={user.email} />
-      <AppFrame>
-        <main className="px-4 py-6 pb-24 md:px-6 lg:pb-6">
-          <div className="mb-6 flex flex-col gap-4">
-            <div className="flex flex-wrap items-center gap-3 text-sm text-white/60">
-              <Link
-                href="/settings/platform/creators"
-                className="rounded-full border border-white/10 px-4 py-2 transition hover:bg-white/10"
-              >
-                ← Zurück zu Creator-Übersicht
-              </Link>
+      <Link
+        href={`/channel/${profile.id}`}
+        className="rounded-full border border-white/10 px-4 py-2 transition hover:bg-white/10"
+      >
+        Kanal öffnen
+      </Link>
 
-              <Link
-                href={`/channel/${profile.id}`}
-                className="rounded-full border border-white/10 px-4 py-2 transition hover:bg-white/10"
-              >
-                Kanal öffnen
-              </Link>
+      <a
+        href={`/api/platform/creators/${profile.id}/export`}
+        className="rounded-full bg-white px-4 py-2 text-sm font-medium text-black transition hover:opacity-90"
+      >
+        CSV exportieren
+      </a>
+    </>
+  )
 
-              <a
-                href={`/api/platform/creators/${profile.id}/export`}
-                className="rounded-full bg-white px-4 py-2 text-sm font-medium text-black transition hover:opacity-90"
-              >
-                CSV exportieren
-              </a>
-            </div>
-
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div className="flex items-center gap-4">
-                <div className="h-16 w-16 overflow-hidden rounded-full bg-white/10">
-                  {avatarUrl ? (
-                    <img
-                      src={avatarUrl}
-                      alt={profile.display_name || profile.username || 'Creator'}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center text-lg text-white/50">
-                      {(profile.display_name?.[0] || profile.username?.[0] || 'C').toUpperCase()}
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <h1 className="text-2xl font-semibold tracking-tight text-white">
-                    {profile.display_name || profile.username || 'Unbekannter Creator'}
-                  </h1>
-                  <p className="mt-1 text-sm text-white/45">@{profile.username || 'creator'}</p>
-                </div>
+  return (
+    <PlatformShell
+      userEmail={user.email}
+      current="creator-detail"
+      creatorId={profile.id}
+      title={profile.display_name || profile.username || 'Unbekannter Creator'}
+      description={`@${profile.username || 'creator'}`}
+      actions={actions}
+    >
+      <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-center gap-4">
+          <div className="h-16 w-16 overflow-hidden rounded-full bg-white/10">
+            {avatarUrl ? (
+              <img
+                src={avatarUrl}
+                alt={profile.display_name || profile.username || 'Creator'}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-lg text-white/50">
+                {(profile.display_name?.[0] || profile.username?.[0] || 'C').toUpperCase()}
               </div>
-
-              <div className="flex flex-wrap gap-2">
-                <span
-                  className={`rounded-full px-3 py-1 text-xs ${
-                    profile.stripe_account_id
-                      ? 'border border-emerald-400/20 bg-emerald-400/10 text-emerald-200'
-                      : 'border border-amber-400/20 bg-amber-400/10 text-amber-200'
-                  }`}
-                >
-                  {profile.stripe_account_id ? 'Stripe verbunden' : 'Stripe fehlt'}
-                </span>
-
-                <span
-                  className={`rounded-full px-3 py-1 text-xs ${
-                    profile.membership_enabled
-                      ? 'border border-fuchsia-400/20 bg-fuchsia-400/10 text-fuchsia-200'
-                      : 'border border-white/10 bg-white/5 text-white/60'
-                  }`}
-                >
-                  {profile.membership_enabled ? 'Membership aktiv' : 'Membership aus'}
-                </span>
-              </div>
-            </div>
+            )}
           </div>
 
-          <section className="mb-6 grid gap-4 md:grid-cols-3">
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-              <div className="text-xs uppercase tracking-wide text-white/40">Brutto</div>
-              <div className="mt-2 text-2xl font-semibold text-white">
-                {formatMoney(totalGross)}
-              </div>
+          <div>
+            <div className="text-sm text-white/50">
+              {profile.bio || 'Keine Bio hinterlegt.'}
             </div>
+          </div>
+        </div>
 
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-              <div className="text-xs uppercase tracking-wide text-white/40">Plattformgebühren</div>
-              <div className="mt-2 text-2xl font-semibold text-white">
-                {formatMoney(totalFees)}
-              </div>
+        <div className="flex flex-wrap gap-2">
+          <span
+            className={`rounded-full px-3 py-1 text-xs ${
+              profile.stripe_account_id
+                ? 'border border-emerald-400/20 bg-emerald-400/10 text-emerald-200'
+                : 'border border-amber-400/20 bg-amber-400/10 text-amber-200'
+            }`}
+          >
+            {profile.stripe_account_id ? 'Stripe verbunden' : 'Stripe fehlt'}
+          </span>
+
+          <span
+            className={`rounded-full px-3 py-1 text-xs ${
+              profile.membership_enabled
+                ? 'border border-fuchsia-400/20 bg-fuchsia-400/10 text-fuchsia-200'
+                : 'border border-white/10 bg-white/5 text-white/60'
+            }`}
+          >
+            {profile.membership_enabled ? 'Membership aktiv' : 'Membership aus'}
+          </span>
+        </div>
+      </div>
+
+      <section className="mb-6 grid gap-4 md:grid-cols-3">
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+          <div className="text-xs uppercase tracking-wide text-white/40">Brutto</div>
+          <div className="mt-2 text-2xl font-semibold text-white">
+            {formatMoney(totalGross)}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+          <div className="text-xs uppercase tracking-wide text-white/40">Plattformgebühren</div>
+          <div className="mt-2 text-2xl font-semibold text-white">
+            {formatMoney(totalFees)}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+          <div className="text-xs uppercase tracking-wide text-white/40">Netto Creator</div>
+          <div className="mt-2 text-2xl font-semibold text-white">
+            {formatMoney(totalNet)}
+          </div>
+        </div>
+      </section>
+
+      <section className="mb-6 grid gap-4 lg:grid-cols-2">
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+          <h2 className="text-lg font-semibold text-white">Monetarisierung</h2>
+          <div className="mt-4 space-y-3 text-sm text-white/70">
+            <div className="flex items-center justify-between gap-4">
+              <span>Einzelkäufe bezahlt</span>
+              <span className="text-white">{paidVideoRows.length}</span>
             </div>
-
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-              <div className="text-xs uppercase tracking-wide text-white/40">Netto Creator</div>
-              <div className="mt-2 text-2xl font-semibold text-white">
-                {formatMoney(totalNet)}
-              </div>
+            <div className="flex items-center justify-between gap-4">
+              <span>Einzelkäufe refunded</span>
+              <span className="text-white">{refundedVideoRows.length}</span>
             </div>
-          </section>
-
-          <section className="mb-6 grid gap-4 lg:grid-cols-2">
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-              <h2 className="text-lg font-semibold text-white">Monetarisierung</h2>
-              <div className="mt-4 space-y-3 text-sm text-white/70">
-                <div className="flex items-center justify-between gap-4">
-                  <span>Einzelkäufe bezahlt</span>
-                  <span className="text-white">{paidVideoRows.length}</span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span>Einzelkäufe refunded</span>
-                  <span className="text-white">{refundedVideoRows.length}</span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span>Membership-Zahlungen bezahlt</span>
-                  <span className="text-white">{paidMembershipRows.length}</span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span>Membership-Zahlungen refunded</span>
-                  <span className="text-white">{refundedMembershipRows.length}</span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span>Aktive Memberships</span>
-                  <span className="text-white">{activeMembershipCount}</span>
-                </div>
-              </div>
+            <div className="flex items-center justify-between gap-4">
+              <span>Membership-Zahlungen bezahlt</span>
+              <span className="text-white">{paidMembershipRows.length}</span>
             </div>
-
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-              <h2 className="text-lg font-semibold text-white">Stripe & Tiers</h2>
-              <div className="mt-4 space-y-3 text-sm text-white/70">
-                <div className="flex items-center justify-between gap-4">
-                  <span>Details eingereicht</span>
-                  <span className="text-white">
-                    {profile.stripe_details_submitted ? 'Ja' : 'Nein'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span>Zahlungen möglich</span>
-                  <span className="text-white">
-                    {profile.stripe_charges_enabled ? 'Ja' : 'Nein'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span>Auszahlungen möglich</span>
-                  <span className="text-white">
-                    {profile.stripe_payouts_enabled ? 'Ja' : 'Nein'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span>Aktive Tiers</span>
-                  <span className="text-white">{activeTiers.length}</span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span>Archivierte Tiers</span>
-                  <span className="text-white">{archivedTiers.length}</span>
-                </div>
-              </div>
+            <div className="flex items-center justify-between gap-4">
+              <span>Membership-Zahlungen refunded</span>
+              <span className="text-white">{refundedMembershipRows.length}</span>
             </div>
-          </section>
+            <div className="flex items-center justify-between gap-4">
+              <span>Aktive Memberships</span>
+              <span className="text-white">{activeMembershipCount}</span>
+            </div>
+          </div>
+        </div>
 
-          <section className="mb-6 rounded-2xl border border-white/10 bg-white/5 p-5">
-            <h2 className="text-lg font-semibold text-white">Aktive Tiers</h2>
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+          <h2 className="text-lg font-semibold text-white">Stripe & Tiers</h2>
+          <div className="mt-4 space-y-3 text-sm text-white/70">
+            <div className="flex items-center justify-between gap-4">
+              <span>Details eingereicht</span>
+              <span className="text-white">
+                {profile.stripe_details_submitted ? 'Ja' : 'Nein'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <span>Zahlungen möglich</span>
+              <span className="text-white">
+                {profile.stripe_charges_enabled ? 'Ja' : 'Nein'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <span>Auszahlungen möglich</span>
+              <span className="text-white">
+                {profile.stripe_payouts_enabled ? 'Ja' : 'Nein'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <span>Aktive Tiers</span>
+              <span className="text-white">{activeTiers.length}</span>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <span>Archivierte Tiers</span>
+              <span className="text-white">{archivedTiers.length}</span>
+            </div>
+          </div>
+        </div>
+      </section>
 
-            {activeTiers.length > 0 ? (
-              <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {activeTiers.map((tier) => (
-                  <div
-                    key={tier.id}
-                    className="rounded-2xl border border-white/10 bg-black/20 p-4"
+      <section className="mb-6 rounded-2xl border border-white/10 bg-white/5 p-5">
+        <h2 className="text-lg font-semibold text-white">Aktive Tiers</h2>
+
+        {activeTiers.length > 0 ? (
+          <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {activeTiers.map((tier) => (
+              <div
+                key={tier.id}
+                className="rounded-2xl border border-white/10 bg-black/20 p-4"
+              >
+                <div className="text-sm font-medium text-white">{tier.name}</div>
+                <div className="mt-2 text-sm text-white/60">
+                  {formatMoney(tier.price_cents, tier.currency)}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
+                  <span
+                    className={`rounded-full px-2 py-1 ${
+                      tier.stripe_product_id
+                        ? 'border border-emerald-400/20 bg-emerald-400/10 text-emerald-200'
+                        : 'border border-amber-400/20 bg-amber-400/10 text-amber-200'
+                    }`}
                   >
-                    <div className="text-sm font-medium text-white">{tier.name}</div>
-                    <div className="mt-2 text-sm text-white/60">
-                      {formatMoney(tier.price_cents, tier.currency)}
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
+                    {tier.stripe_product_id ? 'Produkt ok' : 'Produkt fehlt'}
+                  </span>
+                  <span
+                    className={`rounded-full px-2 py-1 ${
+                      tier.stripe_price_id
+                        ? 'border border-emerald-400/20 bg-emerald-400/10 text-emerald-200'
+                        : 'border border-amber-400/20 bg-amber-400/10 text-amber-200'
+                    }`}
+                  >
+                    {tier.stripe_price_id ? 'Preis ok' : 'Preis fehlt'}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-white/50">
+            Keine aktiven Tiers vorhanden.
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-2xl border border-white/10 bg-white/5 p-5">
+        <h2 className="text-lg font-semibold text-white">Letzte Aktivitäten</h2>
+
+        {activity.length > 0 ? (
+          <div className="mt-4 overflow-x-auto">
+            <table className="min-w-full border-separate border-spacing-y-2">
+              <thead>
+                <tr className="text-left text-xs uppercase tracking-wide text-white/40">
+                  <th className="px-3 py-2">Datum</th>
+                  <th className="px-3 py-2">Typ</th>
+                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">Brutto</th>
+                  <th className="px-3 py-2">Gebühr</th>
+                  <th className="px-3 py-2">Netto</th>
+                  <th className="px-3 py-2">Referenz</th>
+                </tr>
+              </thead>
+              <tbody>
+                {activity.map((item) => (
+                  <tr
+                    key={item.id}
+                    className="rounded-2xl bg-black/20 text-sm text-white/80"
+                  >
+                    <td className="rounded-l-2xl px-3 py-3 whitespace-nowrap">
+                      {formatDate(item.occurred_at)}
+                    </td>
+                    <td className="px-3 py-3">
+                      {item.kind === 'video_purchase' ? 'Einzelkauf' : 'Membership'}
+                    </td>
+                    <td className="px-3 py-3">
                       <span
-                        className={`rounded-full px-2 py-1 ${
-                          tier.stripe_product_id
-                            ? 'border border-emerald-400/20 bg-emerald-400/10 text-emerald-200'
-                            : 'border border-amber-400/20 bg-amber-400/10 text-amber-200'
-                        }`}
+                        className={`inline-flex rounded-full px-2 py-1 text-xs ${statusBadgeClass(
+                          item.status
+                        )}`}
                       >
-                        {tier.stripe_product_id ? 'Produkt ok' : 'Produkt fehlt'}
+                        {item.status}
                       </span>
-                      <span
-                        className={`rounded-full px-2 py-1 ${
-                          tier.stripe_price_id
-                            ? 'border border-emerald-400/20 bg-emerald-400/10 text-emerald-200'
-                            : 'border border-amber-400/20 bg-amber-400/10 text-amber-200'
-                        }`}
-                      >
-                        {tier.stripe_price_id ? 'Preis ok' : 'Preis fehlt'}
-                      </span>
-                    </div>
-                  </div>
+                    </td>
+                    <td className="px-3 py-3 whitespace-nowrap">
+                      {formatMoney(item.gross_cents, item.currency)}
+                    </td>
+                    <td className="px-3 py-3 whitespace-nowrap">
+                      {formatMoney(item.fee_cents, item.currency)}
+                    </td>
+                    <td className="px-3 py-3 whitespace-nowrap">
+                      {formatMoney(item.net_cents, item.currency)}
+                    </td>
+                    <td className="rounded-r-2xl px-3 py-3">
+                      <div className="max-w-[220px] truncate text-white/60">
+                        {item.reference}
+                      </div>
+                    </td>
+                  </tr>
                 ))}
-              </div>
-            ) : (
-              <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-white/50">
-                Keine aktiven Tiers vorhanden.
-              </div>
-            )}
-          </section>
-
-          <section className="rounded-2xl border border-white/10 bg-white/5 p-5">
-            <h2 className="text-lg font-semibold text-white">Letzte Aktivitäten</h2>
-
-            {activity.length > 0 ? (
-              <div className="mt-4 overflow-x-auto">
-                <table className="min-w-full border-separate border-spacing-y-2">
-                  <thead>
-                    <tr className="text-left text-xs uppercase tracking-wide text-white/40">
-                      <th className="px-3 py-2">Datum</th>
-                      <th className="px-3 py-2">Typ</th>
-                      <th className="px-3 py-2">Status</th>
-                      <th className="px-3 py-2">Brutto</th>
-                      <th className="px-3 py-2">Gebühr</th>
-                      <th className="px-3 py-2">Netto</th>
-                      <th className="px-3 py-2">Referenz</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {activity.map((item) => (
-                      <tr
-                        key={item.id}
-                        className="rounded-2xl bg-black/20 text-sm text-white/80"
-                      >
-                        <td className="rounded-l-2xl px-3 py-3 whitespace-nowrap">
-                          {formatDate(item.occurred_at)}
-                        </td>
-                        <td className="px-3 py-3">
-                          {item.kind === 'video_purchase' ? 'Einzelkauf' : 'Membership'}
-                        </td>
-                        <td className="px-3 py-3">
-                          <span
-                            className={`inline-flex rounded-full px-2 py-1 text-xs ${statusBadgeClass(
-                              item.status
-                            )}`}
-                          >
-                            {item.status}
-                          </span>
-                        </td>
-                        <td className="px-3 py-3 whitespace-nowrap">
-                          {formatMoney(item.gross_cents, item.currency)}
-                        </td>
-                        <td className="px-3 py-3 whitespace-nowrap">
-                          {formatMoney(item.fee_cents, item.currency)}
-                        </td>
-                        <td className="px-3 py-3 whitespace-nowrap">
-                          {formatMoney(item.net_cents, item.currency)}
-                        </td>
-                        <td className="rounded-r-2xl px-3 py-3">
-                          <div className="max-w-[220px] truncate text-white/60">
-                            {item.reference}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-white/50">
-                Noch keine Aktivitäten vorhanden.
-              </div>
-            )}
-          </section>
-        </main>
-      </AppFrame>
-    </>
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-white/50">
+            Noch keine Aktivitäten vorhanden.
+          </div>
+        )}
+      </section>
+    </PlatformShell>
   )
 }

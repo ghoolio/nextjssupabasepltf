@@ -1,8 +1,8 @@
 import { cache } from 'react'
-import { createAdminClient } from './supabase-admin'
+import { supabaseAdmin } from './supabase-admin'
 
 export const getPlatformState = cache(async () => {
-  const supabase = createAdminClient()
+  const supabase = supabaseAdmin
   const { data } = await supabase.from('app_settings').select('*').eq('id', 1).maybeSingle()
 
   return data ?? {

@@ -1,9 +1,10 @@
 import Link from 'next/link'
-import { notFound, redirect } from 'next/navigation'
+import { notFound } from 'next/navigation'
 import SiteHeader from '@/components/site-header'
 import AppFrame from '@/components/app-frame'
 import { createClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { requirePlatformAdmin } from '@/lib/platform-admin'
 
 type ProfileRow = {
   id: string
@@ -103,15 +104,8 @@ export default async function SettingsPlatformCreatorDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
+  const { user } = await requirePlatformAdmin()
   const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    redirect('/login')
-  }
 
   const { data: profileRows, error: profileError } = await supabaseAdmin
     .from('profiles')
@@ -286,6 +280,13 @@ export default async function SettingsPlatformCreatorDetailPage({
               >
                 Kanal öffnen
               </Link>
+
+              <a
+                href={`/api/platform/creators/${profile.id}/export`}
+                className="rounded-full bg-white px-4 py-2 text-sm font-medium text-black transition hover:opacity-90"
+              >
+                CSV exportieren
+              </a>
             </div>
 
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">

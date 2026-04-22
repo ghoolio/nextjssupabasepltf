@@ -4,6 +4,7 @@ import SiteHeader from '@/components/site-header'
 import AppFrame from '@/components/app-frame'
 import { createClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { requirePlatformAdmin } from '@/lib/platform-admin'
 
 type VideoPurchaseRow = {
   amount_cents: number
@@ -72,16 +73,9 @@ export default async function SettingsPlatformPage({
 }: {
   searchParams: Promise<{ range?: string }>
 }) {
-  const supabase = await createClient()
-  const qs = await searchParams
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    redirect('/login')
-  }
+    const { user } = await requirePlatformAdmin()
+    const qs = await searchParams
 
   const range = (['today', '7d', '30d', 'all'].includes(qs.range || '')
     ? qs.range

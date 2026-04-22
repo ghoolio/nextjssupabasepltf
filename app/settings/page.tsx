@@ -3,34 +3,21 @@ import { redirect } from 'next/navigation'
 import SiteHeader from '@/components/site-header'
 import AppFrame from '@/components/app-frame'
 import { createClient } from '@/lib/supabase-server'
-import { supabaseAdmin } from '@/lib/supabase-admin'
+import { getPlatformAdminState } from '@/lib/platform-admin'
 
-type VideoPurchaseRow = {
-  amount_cents: number
-  platform_fee_amount_cents: number | null
-  creator_net_amount_cents: number | null
-  payment_status: 'paid' | 'refunded' | 'failed'
-  currency: 'EUR' | 'USD'
-  created_at?: string | null
+type ProfileRow = {
+  id: string
+  username: string | null
+  display_name: string | null
+  bio: string | null
+  avatar_url: string | null
+  banner_url: string | null
+  support_enabled: boolean
+  support_cta: string | null
+  membership_enabled: boolean
 }
 
-type MembershipPaymentRow = {
-  amount_cents: number
-  platform_fee_amount_cents: number
-  creator_net_amount_cents: number
-  payment_status: 'paid' | 'refunded' | 'failed'
-  currency: 'EUR' | 'USD'
-  paid_at: string
-}
-
-function formatMoney(cents: number, currency: 'EUR' | 'USD' = 'EUR') {
-  return new Intl.NumberFormat('de-DE', {
-    style: 'currency',
-    currency,
-  }).format(cents / 100)
-}
-
-export default async function SettingsPlatformPage() {
+export default async function SettingsPage() {
   const supabase = await createClient()
 
   const {
@@ -41,255 +28,178 @@ export default async function SettingsPlatformPage() {
     redirect('/login')
   }
 
-  const { data: videoRows, error: videoError } = await supabaseAdmin
-    .from('video_purchases')
+  const { isPlatformAdmin } = await getPlatformAdminState()
+
+  const { data: profileRows } = await supabase
+    .from('profiles')
     .select(
-      'amount_cents, platform_fee_amount_cents, creator_net_amount_cents, payment_status, currency, created_at'
+      'id, username, display_name, bio, avatar_url, banner_url, support_enabled, support_cta, membership_enabled'
     )
-    .returns<VideoPurchaseRow[]>()
+    .eq('id', user.id)
+    .returns<ProfileRow[]>()
 
-  if (videoError) {
-    throw new Error(videoError.message)
-  }
+  const profile = profileRows?.[0] ?? null
 
-  const { data: membershipRows, error: membershipError } = await supabaseAdmin
-    .from('membership_payments')
-    .select(
-      'amount_cents, platform_fee_amount_cents, creator_net_amount_cents, payment_status, currency, paid_at'
-    )
-    .returns<MembershipPaymentRow[]>()
-
-  if (membershipError) {
-    throw new Error(membershipError.message)
-  }
-
-  const allVideoRows = videoRows ?? []
-  const allMembershipRows = membershipRows ?? []
-
-  const paidVideoRows = allVideoRows.filter((row) => row.payment_status === 'paid')
-  const refundedVideoRows = allVideoRows.filter((row) => row.payment_status === 'refunded')
-
-  const paidMembershipRows = allMembershipRows.filter((row) => row.payment_status === 'paid')
-  const refundedMembershipRows = allMembershipRows.filter(
-    (row) => row.payment_status === 'refunded'
-  )
-
-  const videoGross = paidVideoRows.reduce((sum, row) => sum + row.amount_cents, 0)
-  const videoFees = paidVideoRows.reduce(
-    (sum, row) => sum + (row.platform_fee_amount_cents ?? 0),
-    0
-  )
-  const videoNet = paidVideoRows.reduce(
-    (sum, row) => sum + (row.creator_net_amount_cents ?? 0),
-    0
-  )
-
-  const membershipGross = paidMembershipRows.reduce((sum, row) => sum + row.amount_cents, 0)
-  const membershipFees = paidMembershipRows.reduce(
-    (sum, row) => sum + row.platform_fee_amount_cents,
-    0
-  )
-  const membershipNet = paidMembershipRows.reduce(
-    (sum, row) => sum + row.creator_net_amount_cents,
-    0
-  )
-
-  const refundedVideoGross = refundedVideoRows.reduce((sum, row) => sum + row.amount_cents, 0)
-  const refundedMembershipGross = refundedMembershipRows.reduce(
-    (sum, row) => sum + row.amount_cents,
-    0
-  )
-
-  const totalGross = videoGross + membershipGross
-  const totalFees = videoFees + membershipFees
-  const totalNet = videoNet + membershipNet
-  const totalRefundedGross = refundedVideoGross + refundedMembershipGross
-
-  const totalPaidTransactions = paidVideoRows.length + paidMembershipRows.length
-  const totalRefundedTransactions =
-    refundedVideoRows.length + refundedMembershipRows.length
+  const avatarUrl = profile?.avatar_url
+    ? supabase.storage.from('profile-assets').getPublicUrl(profile.avatar_url).data.publicUrl
+    : null
 
   return (
     <>
       <SiteHeader userEmail={user.email} />
       <AppFrame>
         <main className="px-4 py-6 pb-24 md:px-6 lg:pb-6">
-          <div className="mb-6 flex flex-col gap-4">
-            <div className="flex flex-wrap items-center gap-3 text-sm text-white/60">
-              <Link
-                href="/settings"
-                className="rounded-full border border-white/10 px-4 py-2 transition hover:bg-white/10"
-              >
-                ← Zurück zu Einstellungen
-              </Link>
-            </div>
-
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight text-white">
-                Plattform
-              </h1>
-              <p className="mt-1 text-sm text-white/50">
-                Interner Überblick über Umsatz, Gebühren und Creator-Auszahlungen.
-              </p>
-            </div>
+          <div className="mb-6">
+            <h1 className="text-2xl font-semibold tracking-tight text-white">
+              Einstellungen
+            </h1>
+            <p className="mt-1 text-sm text-white/50">
+              Verwalte dein öffentliches Creator-Profil und deine private Kontoansicht.
+            </p>
           </div>
 
-          <section className="mb-6 grid gap-4 md:grid-cols-3">
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-              <div className="text-xs uppercase tracking-wide text-white/40">Brutto gesamt</div>
-              <div className="mt-2 text-2xl font-semibold text-white">
-                {formatMoney(totalGross)}
-              </div>
-            </div>
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
+            <section className="rounded-3xl border border-white/10 bg-white/5 p-6">
+              <h2 className="text-lg font-semibold text-white">Bereiche</h2>
+              <p className="mt-1 text-sm text-white/45">
+                Öffentliche Kanalverwaltung und private Kontoeinstellungen sauber getrennt.
+              </p>
 
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-              <div className="text-xs uppercase tracking-wide text-white/40">
-                Plattformgebühren gesamt
-              </div>
-              <div className="mt-2 text-2xl font-semibold text-white">
-                {formatMoney(totalFees)}
-              </div>
-            </div>
+              <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                <Link
+                  href="/settings/profile"
+                  className="rounded-2xl border border-white/10 bg-black/20 p-4 transition hover:bg-white/10"
+                >
+                  <div className="text-sm font-medium text-white">Profil bearbeiten</div>
+                  <div className="mt-1 text-sm text-white/45">
+                    Avatar, Banner, Name, Bio und Creator-Einstellungen ändern
+                  </div>
+                </Link>
 
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-              <div className="text-xs uppercase tracking-wide text-white/40">
-                Netto an Creator
-              </div>
-              <div className="mt-2 text-2xl font-semibold text-white">
-                {formatMoney(totalNet)}
-              </div>
-            </div>
-          </section>
+                <Link
+                  href="/settings/account"
+                  className="rounded-2xl border border-white/10 bg-black/20 p-4 transition hover:bg-white/10"
+                >
+                  <div className="text-sm font-medium text-white">Konto</div>
+                  <div className="mt-1 text-sm text-white/45">
+                    Private Kontodaten, Login-Infos und spätere Sicherheitsoptionen
+                  </div>
+                </Link>
 
-          <section className="mb-6 grid gap-4 md:grid-cols-3">
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-              <div className="text-xs uppercase tracking-wide text-white/40">
-                Bezahlte Transaktionen
-              </div>
-              <div className="mt-2 text-2xl font-semibold text-white">
-                {totalPaidTransactions}
-              </div>
-            </div>
+                <Link
+                  href="/settings/creator"
+                  className="rounded-2xl border border-white/10 bg-black/20 p-4 transition hover:bg-white/10"
+                >
+                  <div className="text-sm font-medium text-white">Creator</div>
+                  <div className="mt-1 text-sm text-white/45">
+                    Mitgliedschaften, Stories, Highlights und creator-spezifische Verwaltung
+                  </div>
+                </Link>
 
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-              <div className="text-xs uppercase tracking-wide text-white/40">
-                Refunds
-              </div>
-              <div className="mt-2 text-2xl font-semibold text-white">
-                {totalRefundedTransactions}
-              </div>
-            </div>
+                {isPlatformAdmin ? (
+                  <Link
+                    href="/settings/platform"
+                    className="rounded-2xl border border-white/10 bg-black/20 p-4 transition hover:bg-white/10"
+                  >
+                    <div className="text-sm font-medium text-white">Plattform</div>
+                    <div className="mt-1 text-sm text-white/45">
+                      Interne Umsatz-, Gebühren- und Creator-Auszahlungsübersicht
+                    </div>
+                  </Link>
+                ) : null}
 
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-              <div className="text-xs uppercase tracking-wide text-white/40">
-                Refund-Volumen
-              </div>
-              <div className="mt-2 text-2xl font-semibold text-white">
-                {formatMoney(totalRefundedGross)}
-              </div>
-            </div>
-          </section>
+                <Link
+                  href={`/channel/${user.id}`}
+                  className="rounded-2xl border border-white/10 bg-black/20 p-4 transition hover:bg-white/10"
+                >
+                  <div className="text-sm font-medium text-white">Meinen Kanal ansehen</div>
+                  <div className="mt-1 text-sm text-white/45">
+                    Öffentliche Ansicht deines Kanals öffnen
+                  </div>
+                </Link>
 
-          <section className="mb-6 grid gap-4 lg:grid-cols-2">
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-              <h2 className="text-lg font-semibold text-white">Einzelkäufe</h2>
-              <div className="mt-4 space-y-3 text-sm text-white/70">
-                <div className="flex items-center justify-between gap-4">
-                  <span>Brutto</span>
-                  <span className="text-white">{formatMoney(videoGross)}</span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span>Plattformgebühren</span>
-                  <span className="text-white">{formatMoney(videoFees)}</span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span>Netto Creator</span>
-                  <span className="text-white">{formatMoney(videoNet)}</span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span>Refund-Volumen</span>
-                  <span className="text-white">{formatMoney(refundedVideoGross)}</span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span>Anzahl bezahlt</span>
-                  <span className="text-white">{paidVideoRows.length}</span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span>Anzahl refunded</span>
-                  <span className="text-white">{refundedVideoRows.length}</span>
-                </div>
-              </div>
-            </div>
+                <Link
+                  href="/stories/new"
+                  className="rounded-2xl border border-white/10 bg-black/20 p-4 transition hover:bg-white/10"
+                >
+                  <div className="text-sm font-medium text-white">Story posten</div>
+                  <div className="mt-1 text-sm text-white/45">
+                    Neue Story für Follower, Mitglieder oder alle veröffentlichen
+                  </div>
+                </Link>
 
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-              <h2 className="text-lg font-semibold text-white">Mitgliedschaften</h2>
-              <div className="mt-4 space-y-3 text-sm text-white/70">
-                <div className="flex items-center justify-between gap-4">
-                  <span>Brutto</span>
-                  <span className="text-white">{formatMoney(membershipGross)}</span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span>Plattformgebühren</span>
-                  <span className="text-white">{formatMoney(membershipFees)}</span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span>Netto Creator</span>
-                  <span className="text-white">{formatMoney(membershipNet)}</span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span>Refund-Volumen</span>
-                  <span className="text-white">{formatMoney(refundedMembershipGross)}</span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span>Anzahl bezahlt</span>
-                  <span className="text-white">{paidMembershipRows.length}</span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span>Anzahl refunded</span>
-                  <span className="text-white">{refundedMembershipRows.length}</span>
-                </div>
+                <Link
+                  href="/highlights/new"
+                  className="rounded-2xl border border-white/10 bg-black/20 p-4 transition hover:bg-white/10"
+                >
+                  <div className="text-sm font-medium text-white">Highlight erstellen</div>
+                  <div className="mt-1 text-sm text-white/45">
+                    Stories dauerhaft als Highlight-Sammlung speichern
+                  </div>
+                </Link>
               </div>
-            </div>
-          </section>
+            </section>
 
-          <section className="rounded-2xl border border-white/10 bg-white/5 p-5">
-            <h2 className="text-lg font-semibold text-white">Einordnung</h2>
-            <div className="mt-4 grid gap-4 md:grid-cols-3">
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                <div className="text-xs uppercase tracking-wide text-white/40">
-                  Plattformanteil
-                </div>
-                <div className="mt-2 text-lg font-semibold text-white">
-                  {totalGross > 0 ? ((totalFees / totalGross) * 100).toFixed(1) : '0.0'}%
-                </div>
-              </div>
+            <aside className="space-y-4">
+              <section className="rounded-3xl border border-white/10 bg-white/5 p-6">
+                <div className="flex items-center gap-4">
+                  <div className="h-16 w-16 overflow-hidden rounded-full bg-white/10">
+                    {avatarUrl ? (
+                      <img
+                        src={avatarUrl}
+                        alt={profile?.display_name || profile?.username || 'Profil'}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-lg text-white/50">
+                        {(
+                          profile?.display_name?.[0] ||
+                          profile?.username?.[0] ||
+                          'U'
+                        ).toUpperCase()}
+                      </div>
+                    )}
+                  </div>
 
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                <div className="text-xs uppercase tracking-wide text-white/40">
-                  Creator-Anteil
+                  <div className="min-w-0">
+                    <div className="truncate text-lg font-semibold text-white">
+                      {profile?.display_name || profile?.username || 'Unbekannter User'}
+                    </div>
+                    <div className="mt-1 text-sm text-white/45">
+                      @{profile?.username || 'creator'}
+                    </div>
+                  </div>
                 </div>
-                <div className="mt-2 text-lg font-semibold text-white">
-                  {totalGross > 0 ? ((totalNet / totalGross) * 100).toFixed(1) : '0.0'}%
-                </div>
-              </div>
 
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                <div className="text-xs uppercase tracking-wide text-white/40">
-                  Refund-Quote
+                <div className="mt-5 space-y-2 text-sm text-white/55">
+                  <div>
+                    Mitgliedschaften:{' '}
+                    <span className="text-white">
+                      {profile?.membership_enabled ? 'Aktiviert' : 'Nicht aktiviert'}
+                    </span>
+                  </div>
+                  <div>
+                    Support-CTA:{' '}
+                    <span className="text-white">
+                      {profile?.support_enabled ? 'Aktiviert' : 'Nicht aktiviert'}
+                    </span>
+                  </div>
                 </div>
-                <div className="mt-2 text-lg font-semibold text-white">
-                  {totalPaidTransactions + totalRefundedTransactions > 0
-                    ? (
-                        (totalRefundedTransactions /
-                          (totalPaidTransactions + totalRefundedTransactions)) *
-                        100
-                      ).toFixed(1)
-                    : '0.0'}
-                  %
+              </section>
+
+              <section className="rounded-3xl border border-white/10 bg-white/5 p-6">
+                <h2 className="text-sm font-medium uppercase tracking-wide text-white/45">
+                  Nächste sinnvolle Bereiche
+                </h2>
+                <div className="mt-4 space-y-3 text-sm text-white/55">
+                  <div>Benachrichtigungen</div>
+                  <div>Privatsphäre</div>
+                  <div>Billing / Creator-Auszahlung</div>
+                  <div>Moderation</div>
                 </div>
-              </div>
-            </div>
-          </section>
+              </section>
+            </aside>
+          </div>
         </main>
       </AppFrame>
     </>

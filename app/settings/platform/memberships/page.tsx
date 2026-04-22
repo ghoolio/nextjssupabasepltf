@@ -4,6 +4,7 @@ import SiteHeader from '@/components/site-header'
 import AppFrame from '@/components/app-frame'
 import { createClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { requirePlatformAdmin } from '@/lib/platform-admin'
 
 type MembershipStatus = 'active' | 'canceled' | 'expired'
 type StatusFilter = MembershipStatus | 'all'
@@ -67,16 +68,8 @@ export default async function SettingsPlatformMembershipsPage({
 }: {
   searchParams: Promise<{ status?: string; q?: string }>
 }) {
-  const supabase = await createClient()
+  const { user } = await requirePlatformAdmin()
   const qs = await searchParams
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    redirect('/login')
-  }
 
   const statusFilter = (['active', 'canceled', 'expired', 'all'].includes(qs.status || '')
     ? qs.status
@@ -181,6 +174,10 @@ export default async function SettingsPlatformMembershipsPage({
     { key: 'expired', label: 'Abgelaufen' },
   ]
 
+  const exportHref = `/api/platform/memberships/export?status=${statusFilter}${
+    qs.q ? `&q=${encodeURIComponent(qs.q)}` : ''
+  }`
+
   return (
     <>
       <SiteHeader userEmail={user.email} />
@@ -206,22 +203,31 @@ export default async function SettingsPlatformMembershipsPage({
                 </p>
               </div>
 
-              <form className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <input
-                  type="text"
-                  name="q"
-                  defaultValue={qs.q || ''}
-                  placeholder="Creator, Member oder Tier suchen"
-                  className="w-full rounded-full border border-white/10 bg-black/20 px-4 py-2 text-sm text-white outline-none placeholder:text-white/35 sm:w-80"
-                />
-                <input type="hidden" name="status" value={statusFilter} />
-                <button
-                  type="submit"
-                  className="rounded-full bg-white px-4 py-2 text-sm font-medium text-black transition hover:opacity-90"
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <form className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <input
+                    type="text"
+                    name="q"
+                    defaultValue={qs.q || ''}
+                    placeholder="Creator, Member oder Tier suchen"
+                    className="w-full rounded-full border border-white/10 bg-black/20 px-4 py-2 text-sm text-white outline-none placeholder:text-white/35 sm:w-80"
+                  />
+                  <input type="hidden" name="status" value={statusFilter} />
+                  <button
+                    type="submit"
+                    className="rounded-full bg-white px-4 py-2 text-sm font-medium text-black transition hover:opacity-90"
+                  >
+                    Suchen
+                  </button>
+                </form>
+
+                <a
+                  href={exportHref}
+                  className="rounded-full border border-white/10 px-4 py-2 text-sm text-white transition hover:bg-white/10"
                 >
-                  Suchen
-                </button>
-              </form>
+                  CSV exportieren
+                </a>
+              </div>
             </div>
 
             <div className="flex flex-wrap gap-2">

@@ -4,6 +4,7 @@ import SiteHeader from '@/components/site-header'
 import AppFrame from '@/components/app-frame'
 import { createClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { requirePlatformAdmin } from '@/lib/platform-admin'
 
 type VideoPurchaseRow = {
   video_id: string
@@ -100,16 +101,8 @@ export default async function SettingsPlatformTransactionsPage({
 }: {
   searchParams: Promise<{ range?: string }>
 }) {
-  const supabase = await createClient()
+  const { user } = await requirePlatformAdmin()
   const qs = await searchParams
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    redirect('/login')
-  }
 
   const range = (['today', '7d', '30d', 'all'].includes(qs.range || '')
     ? qs.range
@@ -145,7 +138,8 @@ export default async function SettingsPlatformTransactionsPage({
     membershipQuery = membershipQuery.gte('paid_at', startDate)
   }
 
-  const { data: membershipRows, error: membershipError } = await membershipQuery.returns<MembershipPaymentRow[]>()
+  const { data: membershipRows, error: membershipError } =
+    await membershipQuery.returns<MembershipPaymentRow[]>()
 
   if (membershipError) {
     throw new Error(membershipError.message)
@@ -232,6 +226,13 @@ export default async function SettingsPlatformTransactionsPage({
                     </Link>
                   )
                 })}
+
+                <a
+                  href={`/api/platform/transactions/export?range=${range}`}
+                  className="rounded-full bg-white px-4 py-2 text-sm font-medium text-black transition hover:opacity-90"
+                >
+                  CSV exportieren
+                </a>
               </div>
             </div>
           </div>

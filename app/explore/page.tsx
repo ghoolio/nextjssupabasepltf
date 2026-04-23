@@ -172,8 +172,8 @@ export default async function ExplorePage() {
 
   const { data: profileRows } = creatorIds.length
     ? await supabase
-        .from('profiles')
-        .select('id, username, display_name, avatar_url')
+        .from('public_profiles')
+        .select('id, username, display_name, bio, avatar_url, membership_enabled')
         .in('id', creatorIds)
         .returns<ProfileRow[]>()
     : { data: [] as ProfileRow[] }

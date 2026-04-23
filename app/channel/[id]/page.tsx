@@ -117,7 +117,7 @@ export default async function ChannelPage({
   } = await supabase.auth.getUser()
 
   const { data: profileRows } = await supabase
-    .from('profiles')
+    .from('public_profiles')
     .select(
       'id, username, display_name, bio, avatar_url, banner_url, support_enabled, support_cta, membership_enabled, created_at'
     )

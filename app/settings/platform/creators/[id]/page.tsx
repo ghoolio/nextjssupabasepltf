@@ -3,7 +3,10 @@ import { notFound } from 'next/navigation'
 import PlatformShell from '@/components/platform-shell'
 import { createClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { requirePlatformSupportAccess } from '@/lib/platform-admin'
+import {
+  requirePlatformSupportAccess,
+  getPlatformAccessState,
+} from '@/lib/platform-admin'
 
 type ProfileRow = {
   id: string
@@ -58,6 +61,21 @@ type CreatorMembershipRow = {
   status: 'active' | 'canceled' | 'expired'
 }
 
+type CreatorPayoutRow = {
+  id: string
+  creator_id: string
+  period_start: string
+  period_end: string
+  gross_cents: number
+  platform_fee_cents: number
+  net_cents: number
+  status: 'pending' | 'paid_out' | 'on_hold'
+  paid_out_at: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
 type ActivityItem = {
   id: string
   kind: 'video_purchase' | 'membership_payment'
@@ -77,7 +95,16 @@ function formatMoney(cents: number, currency: 'EUR' | 'USD' = 'EUR') {
   }).format(cents / 100)
 }
 
-function formatDate(value: string) {
+function formatDate(value: string | null) {
+  if (!value) return '—'
+  return new Date(value).toLocaleString('de-DE', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+}
+
+function formatDateTime(value: string) {
   return new Date(value).toLocaleString('de-DE', {
     year: 'numeric',
     month: '2-digit',
@@ -88,10 +115,10 @@ function formatDate(value: string) {
 }
 
 function statusBadgeClass(status: string) {
-  if (status === 'paid' || status === 'active') {
+  if (status === 'paid' || status === 'active' || status === 'paid_out') {
     return 'border border-emerald-400/20 bg-emerald-400/10 text-emerald-200'
   }
-  if (status === 'refunded' || status === 'expired') {
+  if (status === 'refunded' || status === 'expired' || status === 'on_hold') {
     return 'border border-amber-400/20 bg-amber-400/10 text-amber-200'
   }
   return 'border border-red-400/20 bg-red-400/10 text-red-200'
@@ -104,6 +131,8 @@ export default async function SettingsPlatformCreatorDetailPage({
 }) {
   const { id } = await params
   const { user } = await requirePlatformSupportAccess()
+  const access = await getPlatformAccessState()
+  const canSeeFinance = access.canAccessPlatformFinance
   const supabase = await createClient()
 
   const { data: profileRows, error: profileError } = await supabaseAdmin
@@ -196,6 +225,25 @@ export default async function SettingsPlatformCreatorDetailPage({
     throw new Error(activeMembershipError.message)
   }
 
+  let payoutRows: CreatorPayoutRow[] = []
+
+  if (canSeeFinance) {
+    const { data: fetchedPayoutRows, error: payoutError } = await supabaseAdmin
+      .from('creator_payouts')
+      .select(
+        'id, creator_id, period_start, period_end, gross_cents, platform_fee_cents, net_cents, status, paid_out_at, notes, created_at, updated_at'
+      )
+      .eq('creator_id', id)
+      .order('period_end', { ascending: false })
+      .returns<CreatorPayoutRow[]>()
+
+    if (payoutError) {
+      throw new Error(payoutError.message)
+    }
+
+    payoutRows = fetchedPayoutRows ?? []
+  }
+
   const paidVideoRows = videoRows.filter((row) => row.payment_status === 'paid')
   const refundedVideoRows = videoRows.filter((row) => row.payment_status === 'refunded')
 
@@ -231,6 +279,18 @@ export default async function SettingsPlatformCreatorDetailPage({
   const activeTiers = (tierRows ?? []).filter((tier) => !tier.archived)
   const archivedTiers = (tierRows ?? []).filter((tier) => tier.archived)
   const activeMembershipCount = activeMembershipRows?.length ?? 0
+
+  const payoutPendingNet = payoutRows
+    .filter((row) => row.status === 'pending')
+    .reduce((sum, row) => sum + row.net_cents, 0)
+
+  const payoutPaidOutNet = payoutRows
+    .filter((row) => row.status === 'paid_out')
+    .reduce((sum, row) => sum + row.net_cents, 0)
+
+  const payoutOnHoldNet = payoutRows
+    .filter((row) => row.status === 'on_hold')
+    .reduce((sum, row) => sum + row.net_cents, 0)
 
   const activity: ActivityItem[] = [
     ...videoRows.map((row) => ({
@@ -415,6 +475,116 @@ export default async function SettingsPlatformCreatorDetailPage({
         </div>
       </section>
 
+      {canSeeFinance ? (
+        <>
+          <section className="mb-6 grid gap-4 md:grid-cols-3">
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+              <div className="text-xs uppercase tracking-wide text-white/40">Payout pending</div>
+              <div className="mt-2 text-2xl font-semibold text-white">
+                {formatMoney(payoutPendingNet)}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+              <div className="text-xs uppercase tracking-wide text-white/40">Bereits ausgezahlt</div>
+              <div className="mt-2 text-2xl font-semibold text-white">
+                {formatMoney(payoutPaidOutNet)}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+              <div className="text-xs uppercase tracking-wide text-white/40">On hold</div>
+              <div className="mt-2 text-2xl font-semibold text-white">
+                {formatMoney(payoutOnHoldNet)}
+              </div>
+            </div>
+          </section>
+
+          <section className="mb-6 rounded-2xl border border-white/10 bg-white/5 p-5">
+            <div className="mb-4 flex items-center justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold text-white">Payout-Historie</h2>
+                <p className="mt-1 text-sm text-white/45">
+                  Erfasste Auszahlungen und offene Salden für diesen Creator.
+                </p>
+              </div>
+
+              <Link
+                href="/settings/platform/payouts"
+                className="rounded-full border border-white/10 px-4 py-2 text-sm text-white transition hover:bg-white/10"
+              >
+                Alle Payouts öffnen
+              </Link>
+            </div>
+
+            {payoutRows.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="min-w-full border-separate border-spacing-y-2">
+                  <thead>
+                    <tr className="text-left text-xs uppercase tracking-wide text-white/40">
+                      <th className="px-3 py-2">Zeitraum</th>
+                      <th className="px-3 py-2">Status</th>
+                      <th className="px-3 py-2">Brutto</th>
+                      <th className="px-3 py-2">Gebühr</th>
+                      <th className="px-3 py-2">Netto</th>
+                      <th className="px-3 py-2">Ausgezahlt am</th>
+                      <th className="px-3 py-2">Notiz</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {payoutRows.map((row) => (
+                      <tr
+                        key={row.id}
+                        className="rounded-2xl bg-black/20 text-sm text-white/80"
+                      >
+                        <td className="rounded-l-2xl px-3 py-3 whitespace-nowrap">
+                          <div>{formatDate(row.period_start)}</div>
+                          <div className="text-xs text-white/45">
+                            bis {formatDate(row.period_end)}
+                          </div>
+                        </td>
+
+                        <td className="px-3 py-3">
+                          <span
+                            className={`inline-flex rounded-full px-2 py-1 text-xs ${statusBadgeClass(
+                              row.status
+                            )}`}
+                          >
+                            {row.status}
+                          </span>
+                        </td>
+
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          {formatMoney(row.gross_cents)}
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          {formatMoney(row.platform_fee_cents)}
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          {formatMoney(row.net_cents)}
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          {row.paid_out_at ? formatDateTime(row.paid_out_at) : '—'}
+                        </td>
+                        <td className="rounded-r-2xl px-3 py-3">
+                          <div className="max-w-[240px] whitespace-pre-wrap break-words text-white/60">
+                            {row.notes || '—'}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-white/50">
+                Für diesen Creator sind noch keine Payouts erfasst.
+              </div>
+            )}
+          </section>
+        </>
+      ) : null}
+
       <section className="mb-6 rounded-2xl border border-white/10 bg-white/5 p-5">
         <h2 className="text-lg font-semibold text-white">Aktive Tiers</h2>
 
@@ -483,7 +653,7 @@ export default async function SettingsPlatformCreatorDetailPage({
                     className="rounded-2xl bg-black/20 text-sm text-white/80"
                   >
                     <td className="rounded-l-2xl px-3 py-3 whitespace-nowrap">
-                      {formatDate(item.occurred_at)}
+                      {formatDateTime(item.occurred_at)}
                     </td>
                     <td className="px-3 py-3">
                       {item.kind === 'video_purchase' ? 'Einzelkauf' : 'Membership'}

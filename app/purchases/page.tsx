@@ -68,12 +68,12 @@ export default async function PurchasesPage() {
   ]
 
   const { data: profiles } = creatorIds.length
-    ? await supabase
-        .from('profiles')
-        .select('id, username, avatar_url')
-        .in('id', creatorIds)
-        .returns<ProfileRow[]>()
-    : { data: [] as ProfileRow[] }
+  ? await supabase
+      .from('public_profiles')
+      .select('id, username, avatar_url')
+      .in('id', creatorIds)
+      .returns<ProfileRow[]>()
+  : { data: [] as ProfileRow[] }
 
   const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]))
 

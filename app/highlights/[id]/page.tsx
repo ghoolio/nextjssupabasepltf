@@ -66,7 +66,7 @@ export default async function HighlightPage({
   }
 
   const { data: profileRows } = await supabase
-    .from('profiles')
+    .from('public_profiles')
     .select('id, username, display_name, avatar_url')
     .eq('id', highlight.creator_id)
     .returns<ProfileRow[]>()

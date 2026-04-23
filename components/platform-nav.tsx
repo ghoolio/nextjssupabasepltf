@@ -8,6 +8,8 @@ type PlatformNavProps = {
     | 'memberships'
     | 'creators'
     | 'creator-detail'
+    | 'admins'
+    | 'payouts'
   creatorId?: string
   range?: 'today' | '7d' | '30d' | 'all'
 }
@@ -27,6 +29,7 @@ export default async function PlatformNav({
 
   const canSeeFinance = access.canAccessPlatformFinance
   const canSeeSupport = access.canAccessPlatformSupport
+  const canSeeAdmin = access.canAccessPlatformAdmin
 
   return (
     <div className="mb-6 flex flex-col gap-4">
@@ -59,6 +62,13 @@ export default async function PlatformNav({
             >
               Transaktionen
             </Link>
+
+            <Link
+              href="/settings/platform/payouts"
+              className={itemClass(current === 'payouts')}
+            >
+              Payouts
+            </Link>
           </>
         ) : null}
 
@@ -80,6 +90,15 @@ export default async function PlatformNav({
               Creator
             </Link>
           </>
+        ) : null}
+
+        {canSeeAdmin ? (
+          <Link
+            href="/settings/platform/admins"
+            className={itemClass(current === 'admins')}
+          >
+            Rollen
+          </Link>
         ) : null}
 
         {current === 'creator-detail' && creatorId ? (

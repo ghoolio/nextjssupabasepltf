@@ -85,8 +85,8 @@ export default async function MyMembershipsPage() {
 
   const { data: profileRows } = creatorIds.length
     ? await supabase
-        .from('profiles')
-        .select('id, username, display_name, avatar_url, bio')
+        .from('public_profiles')
+        .select('id, username, display_name, avatar_url, bio, membership_enabled')
         .in('id', creatorIds)
         .returns<ProfileRow[]>()
     : { data: [] as ProfileRow[] }

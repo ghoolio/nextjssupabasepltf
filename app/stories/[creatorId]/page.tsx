@@ -40,7 +40,7 @@ export default async function CreatorStoriesPage({
   } = await supabase.auth.getUser()
 
   const { data: profileRows } = await supabase
-    .from('profiles')
+    .from('public_profiles')
     .select('id, username, display_name, avatar_url')
     .eq('id', creatorId)
     .returns<ProfileRow[]>()

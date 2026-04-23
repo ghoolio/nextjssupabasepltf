@@ -5,7 +5,14 @@ import PlatformNav from '@/components/platform-nav'
 
 type PlatformShellProps = {
   userEmail?: string | null
-  current: 'overview' | 'transactions' | 'memberships' | 'creators' | 'creator-detail'
+  current:
+    | 'overview'
+    | 'transactions'
+    | 'memberships'
+    | 'creators'
+    | 'creator-detail'
+    | 'admins'
+    | 'payouts'
   title: string
   description?: string
   creatorId?: string

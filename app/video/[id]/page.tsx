@@ -92,7 +92,7 @@ export default async function VideoDetailPage({
 
   const { data: profileRows } = await supabase
     .from('profiles')
-    .select('id, username, display_name, avatar_url')
+    .select('id, username, display_name, avatar_url, membership_enabled')
     .eq('id', video.user_id)
     .returns<ProfileRow[]>()
 
@@ -168,8 +168,8 @@ export default async function VideoDetailPage({
 
   const { data: creatorProfiles } = creatorIds.length
     ? await supabase
-        .from('profiles')
-        .select('id, username, display_name, avatar_url')
+        .from('public_profiles')
+        .select('id, username, display_name, avatar_url, membership_enabled')
         .in('id', creatorIds)
         .returns<ProfileRow[]>()
     : { data: [] as ProfileRow[] }
